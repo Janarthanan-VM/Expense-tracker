@@ -4,6 +4,9 @@ on:
   push:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -55,3 +58,16 @@ jobs:
         with:
           name: expense-tracker-apk
           path: app/build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Rename APK for the release
+        if: github.ref == 'refs/heads/main'
+        run: cp app/build/app/outputs/flutter-apk/app-release.apk expense-tracker.apk
+
+      - name: Publish APK as a GitHub Release (direct download on phone)
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: Expense Tracker build ${{ github.run_number }}
+          make_latest: true
+          files: expense-tracker.apk
