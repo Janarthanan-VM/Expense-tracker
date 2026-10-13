@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/formatters.dart';
 import '../categories/category.dart';
+import 'payment_mode_ui.dart';
 import 'txn.dart';
 
 /// One row in any transaction list.
@@ -60,7 +61,15 @@ class TransactionTile extends StatelessWidget {
               text: ' (suggested)',
               style: TextStyle(color: scheme.tertiary),
             ),
-          TextSpan(text: '\n$when'),
+          const TextSpan(text: '\n'),
+          WidgetSpan(
+            alignment: PlaceholderAlignment.middle,
+            child: Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: Icon(txn.paymentMode.icon, size: 14, color: scheme.onSurfaceVariant),
+            ),
+          ),
+          TextSpan(text: '${txn.paymentMode.shortLabel}, $when'),
           if (isFailed)
             TextSpan(text: ', failed', style: TextStyle(color: scheme.error)),
         ]),

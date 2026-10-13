@@ -171,8 +171,9 @@ class TransactionRepository {
     return rows.map(Txn.fromMap).toList();
   }
 
-  /// All transactions, newest first, optionally filtered by text.
-  Future<List<Txn>> list({String search = ''}) async {
+  /// All transactions, newest first, optionally filtered by text and by
+  /// payment method (for example only cash).
+  Future<List<Txn>> list({String search = '', PaymentMode? mode}) async {
     final query = search.trim();
     // Escape % and _ so they are searched literally.
     final escaped = query
@@ -180,12 +181,20 @@ class TransactionRepository {
         .replaceAll('%', r'\%')
         .replaceAll('_', r'\_');
     const like = r"LIKE ? ESCAPE '\'";
+    final where = <String>[_notDeleted];
+    final args = <Object>[];
+    if (query.isNotEmpty) {
+      where.add('(payee_name $like OR payee_vpa $like OR note $like)');
+      args.addAll(List.filled(3, '%$escaped%'));
+    }
+    if (mode != null) {
+      where.add('payment_mode = ?');
+      args.add(mode.name);
+    }
     final rows = await _db.query(
       'transactions',
-      where: query.isEmpty
-          ? _notDeleted
-          : '$_notDeleted AND (payee_name $like OR payee_vpa $like OR note $like)',
-      whereArgs: query.isEmpty ? null : List.filled(3, '%$escaped%'),
+      where: where.join(' AND '),
+      whereArgs: args.isEmpty ? null : args,
       orderBy: 'txn_time DESC',
     );
     return rows.map(Txn.fromMap).toList();
@@ -228,6 +237,24 @@ class TransactionRepository {
         AND (c.kind IS NULL OR c.kind = 'income')
     ''', range);
 
+    final modeRows = await _db.rawQuery('''
+      SELECT t.payment_mode AS mode, SUM(t.amount_paise) AS total
+      FROM transactions t
+      LEFT JOIN categories c ON c.id = t.category_id
+      WHERE t.deleted_at IS NULL AND t.status = 'success' AND t.type = 'debit'
+        AND t.txn_time >= ? AND t.txn_time < ?
+        AND (c.kind IS NULL OR c.kind = 'expense')
+      GROUP BY t.payment_mode
+    ''', range);
+
+    final spentByMode = <PaymentMode, int>{};
+    for (final r in modeRows) {
+      final mode =
+          PaymentMode.values.asNameMap()[r['mode'] as String?] ?? PaymentMode.other;
+      final total = (r['total'] as int?) ?? 0;
+      if (total > 0) spentByMode[mode] = (spentByMode[mode] ?? 0) + total;
+    }
+
     final byCategory = spentRows
         .map((r) => CategoryTotal(
               categoryId: r['category_id'] as String?,
@@ -240,6 +267,7 @@ class TransactionRepository {
       spentPaise: byCategory.fold(0, (sum, c) => sum + c.totalPaise),
       incomePaise: (incomeRows.first['total'] as int?) ?? 0,
       byCategory: byCategory,
+      spentByMode: spentByMode,
     );
   }
 }

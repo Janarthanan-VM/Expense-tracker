@@ -52,6 +52,43 @@ void main() {
     });
   });
 
+  group('payment method', () {
+    test('is saved and read back for every method', () {
+      for (final mode in PaymentMode.values) {
+        final now = DateTime(2026, 10, 13, 9, 30);
+        final txn = Txn(
+          id: 'id-${mode.name}',
+          amountPaise: 5000,
+          type: TxnType.debit,
+          status: TxnStatus.success,
+          source: TxnSource.manual,
+          paymentMode: mode,
+          txnTime: now,
+          createdAt: now,
+          updatedAt: now,
+        );
+        expect(Txn.fromMap(txn.toMap()).paymentMode, mode);
+      }
+    });
+
+    test('unknown or missing value falls back to other', () {
+      final now = DateTime(2026, 10, 13).millisecondsSinceEpoch;
+      final row = {
+        'id': 'x',
+        'amount_paise': 100,
+        'type': 'debit',
+        'status': 'success',
+        'source': 'manual',
+        'payment_mode': null,
+        'is_reviewed': 0,
+        'txn_time': now,
+        'created_at': now,
+        'updated_at': now,
+      };
+      expect(Txn.fromMap(row).paymentMode, PaymentMode.other);
+    });
+  });
+
   group('default categories', () {
     test('have unique ids', () {
       final ids = defaultCategories.map((c) => c.id).toList();

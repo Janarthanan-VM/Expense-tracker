@@ -7,6 +7,7 @@ import '../../core/providers.dart';
 import '../../core/utils/formatters.dart';
 import 'add_transaction_screen.dart';
 import 'categorize_action.dart';
+import 'payment_mode_ui.dart';
 import 'transaction_tile.dart';
 import 'txn.dart';
 
@@ -19,6 +20,7 @@ class TransactionListScreen extends ConsumerStatefulWidget {
 
 class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
   String _search = '';
+  PaymentMode? _mode;
   Timer? _debounce;
 
   @override
@@ -36,22 +38,57 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final txns = ref.watch(txnListProvider(_search));
+    final txns = ref.watch(txnListProvider((search: _search, mode: _mode)));
     final categories = ref.watch(categoryMapProvider);
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Transactions'),
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(64),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-            child: SearchBar(
-              hintText: 'Search payee, UPI ID or note',
-              leading: const Icon(Icons.search),
-              elevation: const WidgetStatePropertyAll(0),
-              onChanged: _onSearchChanged,
-            ),
+          preferredSize: const Size.fromHeight(116),
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: SearchBar(
+                  hintText: 'Search payee, UPI ID or note',
+                  leading: const Icon(Icons.search),
+                  elevation: const WidgetStatePropertyAll(0),
+                  onChanged: _onSearchChanged,
+                ),
+              ),
+              SizedBox(
+                height: 48,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: ChoiceChip(
+                        label: const Text('All'),
+                        selected: _mode == null,
+                        showCheckmark: false,
+                        onSelected: (_) => setState(() => _mode = null),
+                      ),
+                    ),
+                    for (final mode in PaymentMode.values)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: ChoiceChip(
+                          avatar: Icon(mode.icon, size: 18),
+                          label: Text(mode.shortLabel),
+                          selected: _mode == mode,
+                          showCheckmark: false,
+                          onSelected: (_) =>
+                              setState(() => _mode = _mode == mode ? null : mode),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 4),
+            ],
           ),
         ),
       ),
@@ -64,9 +101,11 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
               child: Padding(
                 padding: const EdgeInsets.all(32),
                 child: Text(
-                  _search.isEmpty
-                      ? 'No transactions yet. Tap Add to record your first payment.'
-                      : 'Nothing matches "$_search".',
+                  _search.isNotEmpty
+                      ? 'Nothing matches "$_search".'
+                      : _mode != null
+                          ? 'No ${_mode!.label.toLowerCase()} transactions yet.'
+                          : 'No transactions yet. Tap Add expense to record a cash or UPI payment.',
                   textAlign: TextAlign.center,
                 ),
               ),

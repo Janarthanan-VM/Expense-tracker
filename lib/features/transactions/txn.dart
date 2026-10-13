@@ -3,6 +3,22 @@ enum TxnType { debit, credit }
 
 enum TxnStatus { success, pending, failed }
 
+/// How the money was paid or received.
+enum PaymentMode { cash, upi, card, bank, other }
+
+extension PaymentModeLabel on PaymentMode {
+  String get label => switch (this) {
+        PaymentMode.cash => 'Cash',
+        PaymentMode.upi => 'UPI',
+        PaymentMode.card => 'Card',
+        PaymentMode.bank => 'Bank transfer',
+        PaymentMode.other => 'Other',
+      };
+
+  /// Short label for chips and list rows.
+  String get shortLabel => this == PaymentMode.bank ? 'Bank' : label;
+}
+
 /// Where the transaction came from.
 enum TxnSource { manual, scanPay, notification, sms, ocr, statement }
 
@@ -17,6 +33,7 @@ class Txn {
     required this.type,
     required this.status,
     required this.source,
+    required this.paymentMode,
     required this.txnTime,
     required this.createdAt,
     required this.updatedAt,
@@ -36,6 +53,7 @@ class Txn {
   final TxnType type;
   final TxnStatus status;
   final TxnSource source;
+  final PaymentMode paymentMode;
   final String? categoryId;
   final CategorySource? categorySource;
 
@@ -76,6 +94,7 @@ class Txn {
         type: type,
         status: status,
         source: source,
+        paymentMode: paymentMode,
         txnTime: txnTime,
         createdAt: createdAt,
         updatedAt: updatedAt ?? this.updatedAt,
@@ -96,6 +115,7 @@ class Txn {
         'type': type.name,
         'status': status.name,
         'source': source.name,
+        'payment_mode': paymentMode.name,
         'category_id': categoryId,
         'category_source': categorySource?.name,
         'is_reviewed': isReviewed ? 1 : 0,
@@ -119,6 +139,8 @@ class Txn {
       type: TxnType.values.byName(m['type']! as String),
       status: TxnStatus.values.byName(m['status']! as String),
       source: TxnSource.values.byName(m['source']! as String),
+      paymentMode: PaymentMode.values.asNameMap()[m['payment_mode'] as String?] ??
+          PaymentMode.other,
       categoryId: m['category_id'] as String?,
       categorySource:
           categorySource == null ? null : CategorySource.values.byName(categorySource),
@@ -150,6 +172,7 @@ class MonthSummary {
     required this.spentPaise,
     required this.incomePaise,
     required this.byCategory,
+    required this.spentByMode,
   });
 
   final DateTime month;
@@ -158,4 +181,8 @@ class MonthSummary {
 
   /// Spending per category, largest first.
   final List<CategoryTotal> byCategory;
+
+  /// Spending per payment method (cash, UPI, ...). Methods with no spending
+  /// are left out.
+  final Map<PaymentMode, int> spentByMode;
 }

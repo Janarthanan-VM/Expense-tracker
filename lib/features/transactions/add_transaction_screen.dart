@@ -7,19 +7,29 @@ import '../../core/providers.dart';
 import '../../core/utils/formatters.dart';
 import '../categories/category.dart';
 import '../categories/category_picker_sheet.dart';
+import 'payment_mode_ui.dart';
 import 'txn.dart';
 
-Future<void> openTransactionEditor(BuildContext context, {Txn? existing}) {
+Future<void> openTransactionEditor(
+  BuildContext context, {
+  Txn? existing,
+  PaymentMode? mode,
+}) {
   return Navigator.of(context).push(
-    MaterialPageRoute(builder: (_) => AddTransactionScreen(existing: existing)),
+    MaterialPageRoute(
+      builder: (_) => AddTransactionScreen(existing: existing, initialMode: mode),
+    ),
   );
 }
 
 /// Add a new transaction manually, or edit any existing one.
 class AddTransactionScreen extends ConsumerStatefulWidget {
-  const AddTransactionScreen({super.key, this.existing});
+  const AddTransactionScreen({super.key, this.existing, this.initialMode});
 
   final Txn? existing;
+
+  /// Payment method for a new entry. Manual entries default to cash.
+  final PaymentMode? initialMode;
 
   @override
   ConsumerState<AddTransactionScreen> createState() => _AddTransactionScreenState();
@@ -32,6 +42,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
   late final TextEditingController _note;
 
   late TxnType _type;
+  late PaymentMode _mode;
   String? _categoryId;
   bool _remember = false;
   late DateTime _time;
@@ -47,6 +58,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
     _payee = TextEditingController(text: e?.payeeName ?? '');
     _note = TextEditingController(text: e?.note ?? '');
     _type = e?.type ?? TxnType.debit;
+    _mode = e?.paymentMode ?? widget.initialMode ?? PaymentMode.cash;
     _categoryId = e?.categoryId;
     _time = e?.txnTime ?? DateTime.now();
   }
@@ -120,6 +132,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
       type: _type,
       status: base?.status ?? TxnStatus.success,
       source: base?.source ?? TxnSource.manual,
+      paymentMode: _mode,
       categoryId: _categoryId,
       categorySource: _categoryId == null
           ? null
@@ -224,12 +237,24 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                   parseRupeesToPaise(v ?? '') == null ? 'Enter an amount above ₹0' : null,
             ),
             const SizedBox(height: 16),
+            Text(
+              _type == TxnType.debit ? 'Paid with' : 'Received as',
+              style: theme.textTheme.labelLarge,
+            ),
+            const SizedBox(height: 8),
+            PaymentModeSelector(
+              selected: _mode,
+              onChanged: (m) => setState(() => _mode = m),
+            ),
+            const SizedBox(height: 16),
             TextFormField(
               controller: _payee,
               textCapitalization: TextCapitalization.words,
               decoration: InputDecoration(
                 labelText: _type == TxnType.debit ? 'Paid to' : 'Received from',
-                hintText: 'Shop or person name (optional)',
+                hintText: _mode == PaymentMode.cash
+                    ? 'For example: tea shop, auto, vegetables (optional)'
+                    : 'Shop or person name (optional)',
               ),
             ),
             const SizedBox(height: 16),

@@ -36,7 +36,7 @@ class SettingsScreen extends StatelessWidget {
           ListTile(
             leading: Icon(Icons.info_outline),
             title: Text('Version'),
-            subtitle: Text('0.1.1'),
+            subtitle: Text('0.2.0'),
           ),
         ],
       ),

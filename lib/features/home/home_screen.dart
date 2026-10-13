@@ -9,6 +9,7 @@ import '../transactions/add_transaction_screen.dart';
 import '../transactions/categorize_action.dart';
 import '../transactions/to_categorize_screen.dart';
 import '../transactions/transaction_tile.dart';
+import '../transactions/payment_mode_ui.dart';
 import '../transactions/txn.dart';
 
 class HomeScreen extends ConsumerWidget {
@@ -55,7 +56,7 @@ class HomeScreen extends ConsumerWidget {
               data: (list) => list.isEmpty
                   ? const Padding(
                       padding: EdgeInsets.symmetric(vertical: 24),
-                      child: Text('No transactions yet. Tap Add to record your first payment.'),
+                      child: Text('No transactions yet. Tap Add expense to record a cash or UPI payment.'),
                     )
                   : Column(
                       children: [
@@ -111,6 +112,31 @@ class _MonthCard extends StatelessWidget {
               'Received ${formatPaise(summary.incomePaise)}',
               style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onPrimaryContainer),
             ),
+            if (summary.spentByMode.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              Wrap(
+                spacing: 16,
+                runSpacing: 8,
+                children: [
+                  for (final mode in PaymentMode.values)
+                    if (summary.spentByMode[mode] != null)
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(mode.icon, size: 18, color: scheme.onPrimaryContainer),
+                          const SizedBox(width: 6),
+                          Text(
+                            '${mode.shortLabel} ${formatPaise(summary.spentByMode[mode]!)}',
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: scheme.onPrimaryContainer,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                ],
+              ),
+            ],
           ],
         ),
       ),

@@ -9,6 +9,9 @@ This step gives you a working app with:
 - Home: this month's spending and income, spending by category, recent payments
 - Transactions list grouped by day with search
 - Long-press any transaction to change its category quickly
+- **Cash and other payments**: every entry records how you paid (Cash, UPI,
+  Card, Bank, Other). Manual entries default to Cash. Filter the list by
+  method, and see this month's cash vs UPI spending on the home screen
 
 Coming next: backup & restore, Scan & Pay, automatic detection from UPI notifications.
 

@@ -31,7 +31,7 @@ class _AppShellState extends State<AppShell> {
           ? FloatingActionButton.extended(
               onPressed: () => openTransactionEditor(context),
               icon: const Icon(Icons.add),
-              label: const Text('Add'),
+              label: const Text('Add expense'),
             )
           : null,
       bottomNavigationBar: NavigationBar(

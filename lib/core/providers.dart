@@ -41,9 +41,13 @@ final monthSummaryProvider = FutureProvider<MonthSummary>(
   (ref) => ref.watch(txnRepoProvider).monthSummary(DateTime.now()),
 );
 
-/// Transaction list, filtered by the search text.
-final txnListProvider = FutureProvider.autoDispose.family<List<Txn>, String>(
-  (ref, search) => ref.watch(txnRepoProvider).list(search: search),
+/// Filters for the transaction list. A record, so equal filters share a cache.
+typedef TxnFilter = ({String search, PaymentMode? mode});
+
+/// Transaction list, filtered by search text and payment method.
+final txnListProvider = FutureProvider.autoDispose.family<List<Txn>, TxnFilter>(
+  (ref, filter) =>
+      ref.watch(txnRepoProvider).list(search: filter.search, mode: filter.mode),
 );
 
 /// Call after any change to transactions or categories so every screen updates.

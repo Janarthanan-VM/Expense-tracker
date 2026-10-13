@@ -10,7 +10,7 @@ class AppDatabase {
 
   final Database db;
 
-  static const int schemaVersion = 2;
+  static const int schemaVersion = 3;
   static const String fileName = 'expense_tracker.db';
 
   static Future<AppDatabase> open() async {
@@ -26,10 +26,13 @@ class AppDatabase {
       },
       onCreate: (db, version) async {
         await _createSchemaV1(db);
+        await _migrateToV2(db);
+        await _migrateToV3(db);
         await _seedDefaultCategories(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) await _migrateToV2(db);
+        if (oldVersion < 3) await _migrateToV3(db);
       },
     );
     return AppDatabase._(db);
@@ -118,6 +121,24 @@ class AppDatabase {
              THEN 'credit|' ELSE 'debit|' END || match_key
       WHERE match_key NOT LIKE 'debit|%' AND match_key NOT LIKE 'credit|%'
     ''');
+  }
+
+  /// v3: how each payment was made (cash, upi, card, bank, other).
+  /// Earlier manual entries become cash; captured ones (Scan & Pay,
+  /// notification, SMS) are UPI.
+  static Future<void> _migrateToV3(Database db) async {
+    await db.execute(
+      "ALTER TABLE transactions ADD COLUMN payment_mode TEXT NOT NULL DEFAULT 'other'",
+    );
+    await db.execute('''
+      UPDATE transactions SET payment_mode =
+        CASE WHEN source = 'manual' THEN 'cash'
+             WHEN source IN ('scanPay', 'notification', 'sms') THEN 'upi'
+             ELSE 'other' END
+    ''');
+    await db.execute(
+      'CREATE INDEX idx_txn_payment_mode ON transactions(payment_mode)',
+    );
   }
 
   static Future<void> _seedDefaultCategories(Database db) async {
