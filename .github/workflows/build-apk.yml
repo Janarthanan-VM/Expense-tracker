@@ -68,7 +68,7 @@ jobs:
         working-directory: app/android
         run: |
           set -o pipefail
-          ./gradlew :app:testReleaseUnitTest --console=plain 2>&1 | tee ../../gradle-test.log
+          ./gradlew :app:testDebugUnitTest --console=plain 2>&1 | tee ../../gradle-test.log
 
       - name: Report Android test failures
         if: failure()
