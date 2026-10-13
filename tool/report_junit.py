@@ -36,4 +36,6 @@ if failures == 0 and len(sys.argv) > 2:
         tail = "\n".join(all_lines[-30:])
         print(f"::error title=Gradle output (last lines)::{esc(tail[-3500:])}")
 
+total = sum(len(list(ET.parse(x).getroot().iter("testcase"))) for x in reports)
+print(f"::notice title=Android unit tests::{total} run, {failures} failed")
 print(f"report_junit: {failures} failed test(s)")

@@ -70,8 +70,8 @@ jobs:
           set -o pipefail
           ./gradlew :app:testDebugUnitTest --console=plain 2>&1 | tee ../../gradle-test.log
 
-      - name: Report Android test failures
-        if: failure()
+      - name: Report Android test results
+        if: always()
         run: python3 tool/report_junit.py app gradle-test.log
 
       - uses: actions/upload-artifact@v4
