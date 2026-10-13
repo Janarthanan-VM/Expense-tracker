@@ -1,5 +1,6 @@
 import 'package:sqflite_sqlcipher/sqflite.dart';
 
+import '../detection/detected_payment.dart';
 import 'txn.dart';
 
 class TransactionRepository {
@@ -159,7 +160,145 @@ class TransactionRepository {
         whereArgs: [id],
       );
 
+  // ---------------------------------------------------------------- detection
+
+  /// Saves a payment found by automatic detection, or merges it into the
+  /// transaction it duplicates. Returns true if anything changed.
+  ///
+  /// The same payment often arrives twice (UPI app notification and bank
+  /// SMS). Matches are found by id, then UPI reference, then same amount and
+  /// direction within 5 minutes.
+  Future<bool> upsertDetected(DetectedPayment e, Set<String> validCategoryIds) async {
+    final pickedCategory =
+        e.categoryId != null && validCategoryIds.contains(e.categoryId) ? e.categoryId : null;
+
+    var existing = await byId(e.id, includeDeleted: true);
+    if (existing != null && existing.deletedAt != null) return false;
+
+    if (existing == null && e.upiRef != null) {
+      final rows = await _db.query(
+        'transactions',
+        where: 'upi_ref = ?',
+        whereArgs: [e.upiRef],
+        limit: 1,
+      );
+      if (rows.isNotEmpty) {
+        final match = Txn.fromMap(rows.first);
+        if (match.deletedAt != null) return false;
+        existing = match;
+      }
+    }
+
+    if (existing == null && e.hasPayment) {
+      existing = await _findNearDuplicate(e);
+    }
+
+    if (existing != null) {
+      final filled = await _fillMissing(existing, e);
+      if (pickedCategory != null) {
+        await setCategory(existing, pickedCategory);
+        return true;
+      }
+      return filled;
+    }
+
+    if (!e.hasPayment) return false;
+
+    final now = DateTime.now();
+    final saved = await add(Txn(
+      id: e.id,
+      amountPaise: e.amountPaise!,
+      type: e.isDebit! ? TxnType.debit : TxnType.credit,
+      status: TxnStatus.success,
+      source: e.source == 'sms' ? TxnSource.sms : TxnSource.notification,
+      paymentMode: PaymentMode.values.asNameMap()[e.mode] ?? PaymentMode.upi,
+      categoryId: pickedCategory,
+      categorySource: pickedCategory == null ? null : CategorySource.user,
+      isReviewed: pickedCategory != null,
+      payeeName: e.payeeName,
+      payeeVpa: e.payeeVpa,
+      upiRef: e.upiRef,
+      upiApp: e.app,
+      txnTime: e.time ?? now,
+      createdAt: now,
+      updatedAt: now,
+    ));
+    return saved != null;
+  }
+
+  Future<Txn?> _findNearDuplicate(DetectedPayment e) async {
+    final time = (e.time ?? DateTime.now()).millisecondsSinceEpoch;
+    const window = 5 * 60 * 1000;
+    final rows = await _db.query(
+      'transactions',
+      where: '$_notDeleted AND amount_paise = ? AND type = ? '
+          'AND txn_time BETWEEN ? AND ? '
+          "AND (source != 'manual' OR payment_mode = ?)",
+      whereArgs: [
+        e.amountPaise,
+        e.isDebit! ? TxnType.debit.name : TxnType.credit.name,
+        time - window,
+        time + window,
+        e.mode ?? PaymentMode.upi.name,
+      ],
+      orderBy: 'ABS(txn_time - $time)',
+      limit: 1,
+    );
+    return rows.isEmpty ? null : Txn.fromMap(rows.first);
+  }
+
+  /// Adds payee, UPI ID, reference or app when the saved payment lacks them.
+  Future<bool> _fillMissing(Txn existing, DetectedPayment e) async {
+    final updates = <String, Object?>{};
+    if (existing.payeeName == null && e.payeeName != null) updates['payee_name'] = e.payeeName;
+    if (existing.payeeVpa == null && e.payeeVpa != null) updates['payee_vpa'] = e.payeeVpa;
+    if (existing.upiApp == null && e.app != null) updates['upi_app'] = e.app;
+    if (existing.upiRef == null && e.upiRef != null) {
+      final taken = await _db.query(
+        'transactions',
+        columns: ['id'],
+        where: 'upi_ref = ? AND id != ?',
+        whereArgs: [e.upiRef, existing.id],
+        limit: 1,
+      );
+      if (taken.isEmpty) updates['upi_ref'] = e.upiRef;
+    }
+    if (updates.isEmpty) return false;
+    updates['updated_at'] = DateTime.now().millisecondsSinceEpoch;
+    await _db.update('transactions', updates, where: 'id = ?', whereArgs: [existing.id]);
+    return true;
+  }
+
+  /// Most used visible categories in the last 90 days, for the buttons on the
+  /// payment notification. Unused categories follow in their normal order.
+  Future<List<String>> topCategoryIds(TxnType type, {int limit = 2}) async {
+    final since = DateTime.now().subtract(const Duration(days: 90)).millisecondsSinceEpoch;
+    final kind = type == TxnType.debit ? 'expense' : 'income';
+    final rows = await _db.rawQuery('''
+      SELECT c.id AS id
+      FROM categories c
+      LEFT JOIN transactions t
+        ON t.category_id = c.id AND t.deleted_at IS NULL
+       AND t.txn_time >= ? AND t.type = ?
+      WHERE c.kind = ? AND c.is_hidden = 0
+      GROUP BY c.id
+      ORDER BY COUNT(t.id) DESC, c.sort_order, c.name
+      LIMIT ?
+    ''', [since, type.name, kind, limit]);
+    return rows.map((r) => r['id']! as String).toList();
+  }
+
   // ---------------------------------------------------------------- reads
+
+  Future<Txn?> byId(String id, {bool includeDeleted = false}) async {
+    final rows = await _db.query(
+      'transactions',
+      where: includeDeleted ? 'id = ?' : 'id = ? AND $_notDeleted',
+      whereArgs: [id],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : Txn.fromMap(rows.first);
+  }
 
   Future<List<Txn>> recent({int limit = 8}) async {
     final rows = await _db.query(

@@ -1,19 +1,23 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/providers.dart';
 import '../categories/categories_screen.dart';
 import '../settings/settings_screen.dart';
 import '../transactions/add_transaction_screen.dart';
+import '../transactions/categorize_action.dart';
+import '../transactions/to_categorize_screen.dart';
 import '../transactions/transaction_list_screen.dart';
 import 'home_screen.dart';
 
-class AppShell extends StatefulWidget {
+class AppShell extends ConsumerStatefulWidget {
   const AppShell({super.key});
 
   @override
-  State<AppShell> createState() => _AppShellState();
+  ConsumerState<AppShell> createState() => _AppShellState();
 }
 
-class _AppShellState extends State<AppShell> {
+class _AppShellState extends ConsumerState<AppShell> with WidgetsBindingObserver {
   int _index = 0;
 
   static const _pages = <Widget>[
@@ -22,6 +26,53 @@ class _AppShellState extends State<AppShell> {
     CategoriesScreen(),
     SettingsScreen(),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    ref.read(detectionServiceProvider).onEventsAvailable = _syncDetected;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _syncDetected());
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    ref.read(detectionServiceProvider).onEventsAvailable = null;
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      ref.invalidate(detectionStatusProvider);
+      _syncDetected();
+    }
+  }
+
+  /// Saves payments detected while the app was closed, then opens the one
+  /// whose notification the user tapped (if any).
+  Future<void> _syncDetected() async {
+    try {
+      final changed = await ref.read(detectionSyncProvider).run();
+      if (!mounted) return;
+      if (changed) refreshAll(ref);
+
+      final openId = await ref.read(detectionServiceProvider).consumeOpenRequest();
+      if (openId == null || !mounted) return;
+      final txn = await ref.read(txnRepoProvider).byId(openId);
+      if (!mounted) return;
+      if (txn != null) {
+        await categorizeTransaction(context, ref, txn);
+      } else {
+        await Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const ToCategorizeScreen()),
+        );
+      }
+    } catch (e) {
+      debugPrint('Could not sync detected payments: $e');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {

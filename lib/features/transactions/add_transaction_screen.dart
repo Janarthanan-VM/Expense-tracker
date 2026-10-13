@@ -347,7 +347,7 @@ class _UpiDetails extends StatelessWidget {
     final rows = <(String, String)>[
       if (txn.payeeVpa != null) ('UPI ID', txn.payeeVpa!),
       if (txn.upiRef != null) ('UPI reference', txn.upiRef!),
-      if (txn.upiApp != null) ('Paid using', txn.upiApp!),
+      if (txn.upiApp != null) ('Detected from', txn.upiApp!),
       ('Captured from', switch (txn.source) {
         TxnSource.manual => 'Added manually',
         TxnSource.scanPay => 'Scan & Pay',

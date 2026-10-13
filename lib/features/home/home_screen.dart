@@ -5,6 +5,7 @@ import '../../core/providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/formatters.dart';
 import '../categories/category.dart';
+import '../detection/detection_screen.dart';
 import '../transactions/add_transaction_screen.dart';
 import '../transactions/categorize_action.dart';
 import '../transactions/to_categorize_screen.dart';
@@ -21,6 +22,11 @@ class HomeScreen extends ConsumerWidget {
     final pending = ref.watch(toCategorizeProvider);
     final recent = ref.watch(recentTxnsProvider);
     final categories = ref.watch(categoryMapProvider);
+    final detection = ref.watch(detectionStatusProvider).valueOrNull;
+    final showDetectionPromo = detection != null &&
+        detection.supported &&
+        !detection.accessEnabled &&
+        !detection.promoDismissed;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Expense Tracker')),
@@ -34,6 +40,10 @@ class HomeScreen extends ConsumerWidget {
               loading: () => const SizedBox(height: 132),
               error: (e, _) => Text('Could not load this month: $e'),
             ),
+            if (showDetectionPromo) ...[
+              const SizedBox(height: 12),
+              const _DetectionPromoCard(),
+            ],
             if ((pending.valueOrNull ?? const <Txn>[]).isNotEmpty) ...[
               const SizedBox(height: 12),
               _ToCategorizeCard(count: pending.valueOrNull!.length),
@@ -137,6 +147,59 @@ class _MonthCard extends StatelessWidget {
                 ],
               ),
             ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DetectionPromoCard extends ConsumerWidget {
+  const _DetectionPromoCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    return Card.outlined(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 8, 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.bolt, color: theme.colorScheme.primary),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text('Record UPI payments automatically',
+                      style: theme.textTheme.titleSmall),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Payments from Google Pay, PhonePe and your bank SMS are added for you. '
+              'You just pick the category.',
+              style: theme.textTheme.bodyMedium,
+            ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: () async {
+                    await ref.read(detectionServiceProvider).setPromoDismissed(true);
+                    ref.invalidate(detectionStatusProvider);
+                  },
+                  child: const Text('Not now'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const DetectionScreen()),
+                  ),
+                  child: const Text('Set up'),
+                ),
+              ],
+            ),
           ],
         ),
       ),

@@ -2,6 +2,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../features/categories/category.dart';
 import '../features/categories/category_repository.dart';
+import '../features/detection/detection_service.dart';
+import '../features/detection/detection_sync.dart';
 import '../features/transactions/transaction_repository.dart';
 import '../features/transactions/txn.dart';
 import 'db/app_database.dart';
@@ -58,3 +60,19 @@ void refreshAll(WidgetRef ref) {
   ref.invalidate(monthSummaryProvider);
   ref.invalidate(txnListProvider);
 }
+
+// ---------------------------------------------------------- automatic detection
+
+final detectionServiceProvider = Provider((ref) => DetectionService());
+
+final detectionSyncProvider = Provider(
+  (ref) => DetectionSync(
+    ref.watch(detectionServiceProvider),
+    ref.watch(txnRepoProvider),
+    ref.watch(categoryRepoProvider),
+  ),
+);
+
+final detectionStatusProvider = FutureProvider<DetectionStatus>(
+  (ref) => ref.watch(detectionServiceProvider).status(),
+);

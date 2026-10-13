@@ -30,29 +30,43 @@ jobs:
           cp -r lib/. app/lib/
           cp -r test/. app/test/
 
+      - name: Copy Android code (payment detection)
+        run: |
+          main_activity=$(find app/android/app/src/main -name MainActivity.kt)
+          echo "Template MainActivity: $main_activity"
+          pkg_dir=$(dirname "$main_activity")
+          grep -q "^package com.expensetracker.expense_tracker$" "$main_activity"
+          cp native/android/kotlin/*.kt "$pkg_dir/"
+          test_dir="app/android/app/src/test/kotlin/com/expensetracker/expense_tracker"
+          mkdir -p "$test_dir"
+          cp native/android/test/*.kt "$test_dir/"
+          cp -r native/android/res/. app/android/app/src/main/res/
+
       - name: Add packages
         working-directory: app
         run: flutter pub add flutter_riverpod:^2.6.1 sqflite_sqlcipher path flutter_secure_storage uuid intl
 
-      - name: Android settings (minSdk 23+, no Android auto-backup)
+      - name: Android settings (permissions, payment listener, minSdk 23+, no auto-backup)
         working-directory: app
         run: |
-          sed -i 's/minSdk = flutter.minSdkVersion/minSdk = maxOf(flutter.minSdkVersion, 23)/' android/app/build.gradle.kts
-          sed -i 's/<application/<application android:allowBackup="false" android:fullBackupContent="false"/' android/app/src/main/AndroidManifest.xml
-          grep -n "minSdk" android/app/build.gradle.kts
-          grep -n "allowBackup" android/app/src/main/AndroidManifest.xml
+          python3 ../tool/patch_android.py
+          cat android/app/src/main/AndroidManifest.xml
 
       - name: Analyze
         working-directory: app
         run: flutter analyze --no-fatal-infos --no-fatal-warnings
 
-      - name: Test
+      - name: Test (Dart)
         working-directory: app
         run: flutter test
 
       - name: Build APK
         working-directory: app
         run: flutter build apk --release
+
+      - name: Test (Android payment parser)
+        working-directory: app/android
+        run: ./gradlew :app:testReleaseUnitTest --console=plain
 
       - uses: actions/upload-artifact@v4
         with:
