@@ -15,7 +15,9 @@ def esc(text: str) -> str:
 
 root = pathlib.Path(sys.argv[1])
 failures = 0
-for xml in root.rglob("TEST-*.xml"):
+reports = list(root.rglob("TEST-*.xml"))
+print(f"report_junit: found {len(reports)} report file(s)")
+for xml in reports:
     for case in ET.parse(xml).getroot().iter("testcase"):
         for problem in list(case.findall("failure")) + list(case.findall("error")):
             failures += 1
@@ -26,9 +28,12 @@ if failures == 0 and len(sys.argv) > 2:
     # No test reports: probably a compile error. Report Kotlin "e:" lines.
     log = pathlib.Path(sys.argv[2])
     if log.exists():
-        lines = [l for l in log.read_text(errors="replace").splitlines()
-                 if re.match(r"^e: ", l) or "error:" in l.lower()]
+        all_lines = [l for l in log.read_text(errors="replace").splitlines() if l.strip()]
+        lines = [l for l in all_lines if re.match(r"^e: ", l) or "error:" in l.lower()]
         for line in lines[:15]:
             print(f"::error title=Android build error::{esc(line[:900])}")
+        # Always include the end of the Gradle output (what went wrong).
+        tail = "\n".join(all_lines[-30:])
+        print(f"::error title=Gradle output (last lines)::{esc(tail[-3500:])}")
 
 print(f"report_junit: {failures} failed test(s)")

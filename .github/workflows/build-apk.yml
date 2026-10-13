@@ -72,7 +72,7 @@ jobs:
 
       - name: Report Android test failures
         if: failure()
-        run: python3 tool/report_junit.py app/build gradle-test.log
+        run: python3 tool/report_junit.py app gradle-test.log
 
       - uses: actions/upload-artifact@v4
         with:
