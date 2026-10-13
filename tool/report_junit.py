@@ -1,0 +1,34 @@
+"""Prints each failed JUnit test as a GitHub annotation (::error::).
+
+Annotations are readable through the GitHub API even where raw logs are not.
+Usage: python3 tool/report_junit.py <folder with TEST-*.xml> [gradle output log]
+"""
+import pathlib
+import re
+import sys
+import xml.etree.ElementTree as ET
+
+
+def esc(text: str) -> str:
+    return text.replace("%", "%25").replace("\r", "").replace("\n", "%0A")
+
+
+root = pathlib.Path(sys.argv[1])
+failures = 0
+for xml in root.rglob("TEST-*.xml"):
+    for case in ET.parse(xml).getroot().iter("testcase"):
+        for problem in list(case.findall("failure")) + list(case.findall("error")):
+            failures += 1
+            message = (problem.get("message") or problem.text or "").strip()
+            print(f"::error title=Test failed: {case.get('name')}::{esc(message[:900])}")
+
+if failures == 0 and len(sys.argv) > 2:
+    # No test reports: probably a compile error. Report Kotlin "e:" lines.
+    log = pathlib.Path(sys.argv[2])
+    if log.exists():
+        lines = [l for l in log.read_text(errors="replace").splitlines()
+                 if re.match(r"^e: ", l) or "error:" in l.lower()]
+        for line in lines[:15]:
+            print(f"::error title=Android build error::{esc(line[:900])}")
+
+print(f"report_junit: {failures} failed test(s)")
