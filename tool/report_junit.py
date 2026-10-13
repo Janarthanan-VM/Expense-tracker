@@ -32,9 +32,10 @@ if failures == 0 and len(sys.argv) > 2:
         lines = [l for l in all_lines if re.match(r"^e: ", l) or "error:" in l.lower()]
         for line in lines[:15]:
             print(f"::error title=Android build error::{esc(line[:900])}")
-        # Always include the end of the Gradle output (what went wrong).
-        tail = "\n".join(all_lines[-30:])
-        print(f"::error title=Gradle output (last lines)::{esc(tail[-3500:])}")
+        # Include the end of the Gradle output when the build itself failed.
+        if any("BUILD FAILED" in l for l in all_lines):
+            tail = "\n".join(all_lines[-30:])
+            print(f"::error title=Gradle output (last lines)::{esc(tail[-3500:])}")
 
 total = sum(len(list(ET.parse(x).getroot().iter("testcase"))) for x in reports)
 print(f"::notice title=Android unit tests::{total} run, {failures} failed")

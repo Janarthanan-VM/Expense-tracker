@@ -22,7 +22,7 @@ object PaymentNotifier {
     fun notificationId(eventId: String) = eventId.hashCode()
 
     fun formatAmount(paise: Long): String {
-        val f = NumberFormat.getCurrencyInstance(Locale("en", "IN"))
+        val f = NumberFormat.getCurrencyInstance(Locale.forLanguageTag("en-IN"))
         if (paise % 100 == 0L) f.maximumFractionDigits = 0
         return f.format(paise / 100.0)
     }
