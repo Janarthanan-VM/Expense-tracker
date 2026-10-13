@@ -1,0 +1,130 @@
+import 'package:path/path.dart' as p;
+import 'package:sqflite_sqlcipher/sqflite.dart';
+
+import '../../features/categories/default_categories.dart';
+import 'db_key_store.dart';
+
+/// Encrypted SQLite database (SQLCipher) stored only on the phone.
+class AppDatabase {
+  AppDatabase._(this.db);
+
+  final Database db;
+
+  static const int schemaVersion = 2;
+  static const String fileName = 'expense_tracker.db';
+
+  static Future<AppDatabase> open() async {
+    final password = await DbKeyStore().getOrCreateKey();
+    final path = p.join(await getDatabasesPath(), fileName);
+
+    final db = await openDatabase(
+      path,
+      password: password,
+      version: schemaVersion,
+      onConfigure: (db) async {
+        await db.execute('PRAGMA foreign_keys = ON');
+      },
+      onCreate: (db, version) async {
+        await _createSchemaV1(db);
+        await _seedDefaultCategories(db);
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) await _migrateToV2(db);
+      },
+    );
+    return AppDatabase._(db);
+  }
+
+  static Future<void> _createSchemaV1(Database db) async {
+    final batch = db.batch();
+
+    batch.execute('''
+      CREATE TABLE categories (
+        id          TEXT PRIMARY KEY,
+        name        TEXT NOT NULL,
+        icon_key    TEXT NOT NULL,
+        color       INTEGER NOT NULL,
+        kind        TEXT NOT NULL CHECK (kind IN ('expense', 'income', 'transfer')),
+        parent_id   TEXT REFERENCES categories(id),
+        is_default  INTEGER NOT NULL DEFAULT 0,
+        is_hidden   INTEGER NOT NULL DEFAULT 0,
+        sort_order  INTEGER NOT NULL DEFAULT 0
+      )
+    ''');
+
+    // Payees the user asked us to remember ("Always use this category").
+    // match_key is "<debit|credit>|vpa:<upi id>", or "...|name:<payee name>" without a UPI ID.
+    batch.execute('''
+      CREATE TABLE payees (
+        id                   TEXT PRIMARY KEY,
+        match_key            TEXT NOT NULL UNIQUE,
+        display_name         TEXT,
+        vpa                  TEXT,
+        default_category_id  TEXT REFERENCES categories(id) ON DELETE SET NULL,
+        updated_at           INTEGER NOT NULL
+      )
+    ''');
+
+    batch.execute('''
+      CREATE TABLE transactions (
+        id               TEXT PRIMARY KEY,
+        amount_paise     INTEGER NOT NULL CHECK (amount_paise > 0),
+        type             TEXT NOT NULL,
+        status           TEXT NOT NULL,
+        category_id      TEXT REFERENCES categories(id) ON DELETE SET NULL,
+        category_source  TEXT,
+        is_reviewed      INTEGER NOT NULL DEFAULT 0,
+        payee_name       TEXT,
+        payee_vpa        TEXT,
+        upi_ref          TEXT,
+        upi_app          TEXT,
+        source           TEXT NOT NULL,
+        note             TEXT,
+        txn_time         INTEGER NOT NULL,
+        created_at       INTEGER NOT NULL,
+        updated_at       INTEGER NOT NULL,
+        deleted_at       INTEGER
+      )
+    ''');
+
+    // The same UPI payment from Scan & Pay, notification and SMS is stored once.
+    batch.execute('''
+      CREATE UNIQUE INDEX idx_txn_upi_ref ON transactions(upi_ref)
+      WHERE upi_ref IS NOT NULL AND deleted_at IS NULL
+    ''');
+    batch.execute('CREATE INDEX idx_txn_time ON transactions(txn_time)');
+    batch.execute('CREATE INDEX idx_txn_category ON transactions(category_id)');
+
+    // Split one payment across categories (screen comes in a later step).
+    batch.execute('''
+      CREATE TABLE transaction_splits (
+        id              TEXT PRIMARY KEY,
+        transaction_id  TEXT NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+        category_id     TEXT NOT NULL REFERENCES categories(id),
+        amount_paise    INTEGER NOT NULL CHECK (amount_paise > 0),
+        note            TEXT
+      )
+    ''');
+
+    await batch.commit(noResult: true);
+  }
+
+  /// v2: payee rules are stored per direction ("debit|vpa:..." /
+  /// "credit|vpa:..."). Existing rules get the direction of their category.
+  static Future<void> _migrateToV2(Database db) async {
+    await db.execute('''
+      UPDATE payees SET match_key =
+        CASE WHEN (SELECT kind FROM categories WHERE id = payees.default_category_id) = 'income'
+             THEN 'credit|' ELSE 'debit|' END || match_key
+      WHERE match_key NOT LIKE 'debit|%' AND match_key NOT LIKE 'credit|%'
+    ''');
+  }
+
+  static Future<void> _seedDefaultCategories(Database db) async {
+    final batch = db.batch();
+    for (final category in defaultCategories) {
+      batch.insert('categories', category.toMap());
+    }
+    await batch.commit(noResult: true);
+  }
+}
