@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
+import '../../core/theme/app_theme.dart';
 import '../../core/utils/formatters.dart';
 import 'add_transaction_screen.dart';
 import 'categorize_action.dart';
@@ -21,6 +22,7 @@ class TransactionListScreen extends ConsumerStatefulWidget {
 class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
   String _search = '';
   PaymentMode? _mode;
+  TxnType? _type;
   Timer? _debounce;
 
   @override
@@ -38,7 +40,8 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final txns = ref.watch(txnListProvider((search: _search, mode: _mode)));
+    final txns = ref.watch(txnListProvider((search: _search, mode: _mode, type: _type)));
+    final filtered = _search.isNotEmpty || _mode != null || _type != null;
     final categories = ref.watch(categoryMapProvider);
 
     return Scaffold(
@@ -67,10 +70,32 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                       padding: const EdgeInsets.only(right: 8),
                       child: ChoiceChip(
                         label: const Text('All'),
-                        selected: _mode == null,
+                        selected: _mode == null && _type == null,
                         showCheckmark: false,
-                        onSelected: (_) => setState(() => _mode = null),
+                        onSelected: (_) => setState(() {
+                          _mode = null;
+                          _type = null;
+                        }),
                       ),
+                    ),
+                    for (final (type, label, icon) in const [
+                      (TxnType.credit, 'Money in', Icons.south_west),
+                      (TxnType.debit, 'Money out', Icons.north_east),
+                    ])
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: ChoiceChip(
+                          avatar: Icon(icon, size: 18),
+                          label: Text(label),
+                          selected: _type == type,
+                          showCheckmark: false,
+                          onSelected: (_) =>
+                              setState(() => _type = _type == type ? null : type),
+                        ),
+                      ),
+                    const Padding(
+                      padding: EdgeInsets.fromLTRB(0, 10, 8, 10),
+                      child: VerticalDivider(width: 1),
                     ),
                     for (final mode in PaymentMode.values)
                       Padding(
@@ -103,8 +128,8 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                 child: Text(
                   _search.isNotEmpty
                       ? 'Nothing matches "$_search".'
-                      : _mode != null
-                          ? 'No ${_mode!.label.toLowerCase()} transactions yet.'
+                      : filtered
+                          ? 'No transactions match these filters.'
                           : 'No transactions yet. Tap Add expense to record a cash or UPI payment.',
                   textAlign: TextAlign.center,
                 ),
@@ -112,8 +137,8 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
             );
           }
 
-          // Flatten into day headers + rows.
-          final items = <Object>[];
+          // Flatten into a totals row, day headers and transaction rows.
+          final items = <Object>[if (filtered) _Totals.of(list)];
           DateTime? lastDay;
           for (final t in list) {
             final day = DateTime(t.txnTime.year, t.txnTime.month, t.txnTime.day);
@@ -129,6 +154,7 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
             itemCount: items.length,
             itemBuilder: (context, i) {
               final item = items[i];
+              if (item is _Totals) return _TotalsBar(totals: item);
               if (item is DateTime) {
                 return Padding(
                   padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
@@ -150,6 +176,63 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
             },
           );
         },
+      ),
+    );
+  }
+}
+
+/// Money in and out across the transactions currently shown.
+class _Totals {
+  const _Totals({required this.inPaise, required this.outPaise, required this.count});
+
+  factory _Totals.of(List<Txn> list) {
+    var inPaise = 0;
+    var outPaise = 0;
+    for (final t in list) {
+      if (t.status == TxnStatus.failed) continue;
+      if (t.type == TxnType.credit) {
+        inPaise += t.amountPaise;
+      } else {
+        outPaise += t.amountPaise;
+      }
+    }
+    return _Totals(inPaise: inPaise, outPaise: outPaise, count: list.length);
+  }
+
+  final int inPaise;
+  final int outPaise;
+  final int count;
+}
+
+class _TotalsBar extends StatelessWidget {
+  const _TotalsBar({required this.totals});
+
+  final _Totals totals;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      child: Wrap(
+        spacing: 16,
+        runSpacing: 4,
+        children: [
+          Text(
+            totals.count == 1 ? '1 transaction' : '${totals.count} transactions',
+            style: theme.textTheme.bodyMedium,
+          ),
+          if (totals.inPaise > 0)
+            Text(
+              'In ${formatPaise(totals.inPaise)}',
+              style: theme.textTheme.bodyMedium?.copyWith(color: AppTheme.income),
+            ),
+          if (totals.outPaise > 0)
+            Text(
+              'Out ${formatPaise(totals.outPaise)}',
+              style: theme.textTheme.bodyMedium?.copyWith(color: AppTheme.expense),
+            ),
+        ],
       ),
     );
   }

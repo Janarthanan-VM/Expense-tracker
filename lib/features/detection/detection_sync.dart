@@ -56,6 +56,21 @@ class DetectionSync {
     return changed;
   }
 
+  /// Imports bank payment SMS from the last [days] days of the inbox.
+  /// Returns how many new transactions were added; payments that are
+  /// already saved (or that you deleted) are skipped.
+  Future<int> importSms(int days) async {
+    final events = await _service.importSmsHistory(days);
+    final categories = await _categories.all();
+    final validIds = {for (final c in categories) c.id};
+    var added = 0;
+    for (final e in events) {
+      if (await _txns.upsertDetected(e, validIds, imported: true)) added++;
+    }
+    await _pushHints(categories);
+    return added;
+  }
+
   Future<void> _pushHints(List<TxnCategory> categories) async {
     final byId = {for (final c in categories) c.id: c};
     Future<List<Map<String, String>>> top(TxnType type) async {

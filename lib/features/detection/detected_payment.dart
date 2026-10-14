@@ -1,4 +1,6 @@
-/// A payment queued by the Android notification listener.
+/// A payment found by the Android side: a UPI app notification, a bank SMS
+/// (read live or imported from the inbox), or a category picked from our
+/// own notification.
 ///
 /// Every item is keyed by [id]. It either describes a new payment (amount
 /// and direction present) or only carries a category the user picked from
@@ -15,6 +17,7 @@ class DetectedPayment {
     this.payeeName,
     this.payeeVpa,
     this.upiRef,
+    this.account,
     this.categoryId,
   });
 
@@ -34,6 +37,9 @@ class DetectedPayment {
   final String? payeeName;
   final String? payeeVpa;
   final String? upiRef;
+
+  /// Last digits of the bank account or card ("1234" from "A/c XX1234").
+  final String? account;
   final String? categoryId;
 
   bool get hasPayment => amountPaise != null && amountPaise! > 0 && isDebit != null;
@@ -57,6 +63,7 @@ class DetectedPayment {
       payeeName: _str(j['payeeName']),
       payeeVpa: _str(j['payeeVpa']),
       upiRef: _str(j['upiRef']),
+      account: _str(j['account']),
       categoryId: _str(j['categoryId']),
     );
   }

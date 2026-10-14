@@ -26,6 +26,7 @@ class HomeScreen extends ConsumerWidget {
     final showDetectionPromo = detection != null &&
         detection.supported &&
         !detection.accessEnabled &&
+        !detection.smsPermission &&
         !detection.promoDismissed;
 
     return Scaffold(
@@ -97,6 +98,8 @@ class _MonthCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final onCard = scheme.onPrimaryContainer;
+    final net = summary.incomePaise - summary.spentPaise;
 
     return Card.filled(
       color: scheme.primaryContainer,
@@ -106,21 +109,40 @@ class _MonthCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Spent in ${formatMonth(summary.month)}',
-              style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onPrimaryContainer),
+              formatMonth(summary.month),
+              style: theme.textTheme.titleSmall?.copyWith(color: onCard),
             ),
-            const SizedBox(height: 4),
-            Text(
-              formatPaise(summary.spentPaise),
-              style: theme.textTheme.displaySmall?.copyWith(
-                color: scheme.onPrimaryContainer,
-                fontWeight: FontWeight.w600,
-              ),
+            const SizedBox(height: 12),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: _Flow(
+                    label: 'Money out',
+                    hint: 'Debited and spent',
+                    icon: Icons.north_east,
+                    amount: summary.spentPaise,
+                    color: onCard,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: _Flow(
+                    label: 'Money in',
+                    hint: 'Credited and received',
+                    icon: Icons.south_west,
+                    amount: summary.incomePaise,
+                    color: onCard,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             Text(
-              'Received ${formatPaise(summary.incomePaise)}',
-              style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onPrimaryContainer),
+              net >= 0
+                  ? 'You kept ${formatPaise(net)} this month'
+                  : 'You spent ${formatPaise(-net)} more than you received',
+              style: theme.textTheme.bodyMedium?.copyWith(color: onCard),
             ),
             if (summary.spentByMode.isNotEmpty) ...[
               const SizedBox(height: 16),
@@ -133,12 +155,12 @@ class _MonthCard extends StatelessWidget {
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(mode.icon, size: 18, color: scheme.onPrimaryContainer),
+                          Icon(mode.icon, size: 18, color: onCard),
                           const SizedBox(width: 6),
                           Text(
                             '${mode.shortLabel} ${formatPaise(summary.spentByMode[mode]!)}',
                             style: theme.textTheme.bodyMedium?.copyWith(
-                              color: scheme.onPrimaryContainer,
+                              color: onCard,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -149,6 +171,57 @@ class _MonthCard extends StatelessWidget {
             ],
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// One side of the month card: money out or money in.
+class _Flow extends StatelessWidget {
+  const _Flow({
+    required this.label,
+    required this.hint,
+    required this.icon,
+    required this.amount,
+    required this.color,
+  });
+
+  final String label;
+  final String hint;
+  final IconData icon;
+  final int amount;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Semantics(
+      label: '$label ${formatPaise(amount)}',
+      excludeSemantics: true,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 16, color: color),
+              const SizedBox(width: 4),
+              Text(label, style: theme.textTheme.bodyMedium?.copyWith(color: color)),
+            ],
+          ),
+          const SizedBox(height: 4),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              formatPaise(amount),
+              style: theme.textTheme.headlineMedium?.copyWith(
+                color: color,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          Text(hint, style: theme.textTheme.bodySmall?.copyWith(color: color)),
+        ],
       ),
     );
   }
@@ -171,15 +244,15 @@ class _DetectionPromoCard extends ConsumerWidget {
                 Icon(Icons.bolt, color: theme.colorScheme.primary),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text('Record UPI payments automatically',
+                  child: Text('Record payments automatically',
                       style: theme.textTheme.titleSmall),
                 ),
               ],
             ),
             const SizedBox(height: 6),
             Text(
-              'Payments from Google Pay, PhonePe and your bank SMS are added for you. '
-              'You just pick the category.',
+              'Money credited and debited in your bank SMS, Google Pay and PhonePe is '
+              'added for you. You just pick the category.',
               style: theme.textTheme.bodyMedium,
             ),
             Row(

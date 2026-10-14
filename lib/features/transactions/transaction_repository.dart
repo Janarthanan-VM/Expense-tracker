@@ -168,7 +168,16 @@ class TransactionRepository {
   /// The same payment often arrives twice (UPI app notification and bank
   /// SMS). Matches are found by id, then UPI reference, then same amount and
   /// direction within 5 minutes.
-  Future<bool> upsertDetected(DetectedPayment e, Set<String> validCategoryIds) async {
+  /// Saves or merges a detected payment. Returns true if anything changed.
+  ///
+  /// With [imported] (past SMS from the inbox) it returns true only when a
+  /// new transaction was added, and a payment the user already deleted is
+  /// never brought back, even without a UPI reference.
+  Future<bool> upsertDetected(
+    DetectedPayment e,
+    Set<String> validCategoryIds, {
+    bool imported = false,
+  }) async {
     final pickedCategory =
         e.categoryId != null && validCategoryIds.contains(e.categoryId) ? e.categoryId : null;
 
@@ -190,16 +199,17 @@ class TransactionRepository {
     }
 
     if (existing == null && e.hasPayment) {
-      existing = await _findNearDuplicate(e);
+      existing = await _findNearDuplicate(e, includeDeleted: imported);
+      if (existing != null && existing.deletedAt != null) return false;
     }
 
     if (existing != null) {
       final filled = await _fillMissing(existing, e);
       if (pickedCategory != null) {
         await setCategory(existing, pickedCategory);
-        return true;
+        return !imported;
       }
-      return filled;
+      return filled && !imported;
     }
 
     if (!e.hasPayment) return false;
@@ -226,12 +236,12 @@ class TransactionRepository {
     return saved != null;
   }
 
-  Future<Txn?> _findNearDuplicate(DetectedPayment e) async {
+  Future<Txn?> _findNearDuplicate(DetectedPayment e, {bool includeDeleted = false}) async {
     final time = (e.time ?? DateTime.now()).millisecondsSinceEpoch;
     const window = 5 * 60 * 1000;
     final rows = await _db.query(
       'transactions',
-      where: '$_notDeleted AND amount_paise = ? AND type = ? '
+      where: '${includeDeleted ? '1 = 1' : _notDeleted} AND amount_paise = ? AND type = ? '
           'AND txn_time BETWEEN ? AND ? '
           "AND (source != 'manual' OR payment_mode = ?)",
       whereArgs: [
@@ -312,7 +322,7 @@ class TransactionRepository {
 
   /// All transactions, newest first, optionally filtered by text and by
   /// payment method (for example only cash).
-  Future<List<Txn>> list({String search = '', PaymentMode? mode}) async {
+  Future<List<Txn>> list({String search = '', PaymentMode? mode, TxnType? type}) async {
     final query = search.trim();
     // Escape % and _ so they are searched literally.
     final escaped = query
@@ -329,6 +339,10 @@ class TransactionRepository {
     if (mode != null) {
       where.add('payment_mode = ?');
       args.add(mode.name);
+    }
+    if (type != null) {
+      where.add('type = ?');
+      args.add(type.name);
     }
     final rows = await _db.query(
       'transactions',

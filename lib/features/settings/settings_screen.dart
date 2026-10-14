@@ -17,10 +17,10 @@ class SettingsScreen extends ConsumerWidget {
         children: [
           ListTile(
             leading: const Icon(Icons.notifications_active_outlined),
-            title: const Text('Detect UPI payments automatically'),
+            title: const Text('Record payments automatically'),
             subtitle: Text(
               detection == null
-                  ? 'Record Google Pay, PhonePe and bank SMS payments'
+                  ? 'Money credited and debited from bank SMS and UPI apps'
                   : detection.isWorking
                       ? 'On'
                       : 'Off. Tap to set up',
@@ -51,7 +51,7 @@ class SettingsScreen extends ConsumerWidget {
           const ListTile(
             leading: Icon(Icons.info_outline),
             title: Text('Version'),
-            subtitle: Text('0.3.0'),
+            subtitle: Text('0.4.0'),
           ),
         ],
       ),

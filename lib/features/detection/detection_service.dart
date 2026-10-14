@@ -14,6 +14,7 @@ class DetectionStatus {
     required this.canNotify,
     required this.promoDismissed,
     required this.sdk,
+    required this.smsPermission,
   });
 
   static const unsupported = DetectionStatus(
@@ -23,6 +24,7 @@ class DetectionStatus {
     canNotify: false,
     promoDismissed: true,
     sdk: 0,
+    smsPermission: false,
   );
 
   /// Only Android can read other apps' notifications.
@@ -39,10 +41,26 @@ class DetectionStatus {
   final bool promoDismissed;
   final int sdk;
 
-  bool get isWorking => supported && accessEnabled && enabled;
+  /// The app may read bank SMS directly (live and past messages).
+  final bool smsPermission;
+
+  /// Payments are recorded when either source is allowed.
+  bool get isWorking => supported && enabled && (smsPermission || accessEnabled);
 }
 
-/// Talks to the Android side (PaymentNotificationListener / MainActivity).
+/// Result of asking Android for the SMS permission.
+enum SmsPermissionResult {
+  granted,
+
+  /// The user said no; the app can ask again.
+  denied,
+
+  /// Android will not show the dialog any more. The user has to allow it in
+  /// App info (and on Android 15+, first "Allow restricted settings").
+  blocked,
+}
+
+/// Talks to the Android side (notification listener, SMS reader, MainActivity).
 class DetectionService {
   DetectionService() {
     if (_supported) {
@@ -70,6 +88,7 @@ class DetectionService {
         canNotify: m['canNotify'] == true,
         promoDismissed: m['promoDismissed'] == true,
         sdk: (m['sdk'] as num?)?.toInt() ?? 0,
+        smsPermission: m['smsPermission'] == true,
       );
     } on PlatformException {
       return DetectionStatus.unsupported;
@@ -94,21 +113,50 @@ class DetectionService {
   Future<void> setPromoDismissed(bool value) => _call('setPromoDismissed', value);
   Future<void> setCategoryHints(String json) => _call('setCategoryHints', json);
 
-  /// Returns and clears everything the listener queued.
-  Future<List<DetectedPayment>> takeEvents() async {
-    if (!_supported) return const [];
+  Future<SmsPermissionResult> requestSmsPermission() async {
+    if (!_supported) return SmsPermissionResult.blocked;
     try {
-      final raw = await _channel.invokeMethod<String>('takeEvents');
-      if (raw == null || raw.isEmpty) return const [];
+      final answer = await _channel
+          .invokeMethod<String>('requestSmsPermission')
+          // If Android never answers (for example the screen was rotated
+          // while asking), stop waiting; the status is re-checked on resume.
+          .timeout(const Duration(minutes: 2), onTimeout: () => 'denied');
+      return SmsPermissionResult.values.asNameMap()[answer] ?? SmsPermissionResult.denied;
+    } on MissingPluginException {
+      return SmsPermissionResult.blocked;
+    } on PlatformException {
+      return SmsPermissionResult.denied;
+    }
+  }
+
+  /// Reads bank payment SMS from the last [days] days of the inbox.
+  /// Throws [PlatformException] if the SMS permission is missing.
+  Future<List<DetectedPayment>> importSmsHistory(int days) async {
+    if (!_supported) return const [];
+    final raw = await _channel.invokeMethod<String>('importSmsHistory', days);
+    return _decode(raw);
+  }
+
+  static List<DetectedPayment> _decode(String? raw) {
+    if (raw == null || raw.isEmpty) return const [];
+    try {
       final list = jsonDecode(raw) as List<dynamic>;
       return [
         for (final item in list)
           if (item is Map<String, dynamic> && item['id'] is String)
             DetectedPayment.fromJson(item),
       ];
-    } on MissingPluginException {
-      return const [];
     } on FormatException {
+      return const [];
+    }
+  }
+
+  /// Returns and clears everything the listener queued.
+  Future<List<DetectedPayment>> takeEvents() async {
+    if (!_supported) return const [];
+    try {
+      return _decode(await _channel.invokeMethod<String>('takeEvents'));
+    } on MissingPluginException {
       return const [];
     }
   }

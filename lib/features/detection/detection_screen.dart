@@ -3,10 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
 import '../../core/utils/formatters.dart';
+import '../transactions/to_categorize_screen.dart';
 import 'detected_payment.dart';
 import 'detection_service.dart';
 
-/// Turn on automatic detection of UPI payments and check that it works.
+/// Turn on automatic recording of money credited and debited (bank SMS and
+/// UPI app notifications), import past bank SMS, and test a message.
 class DetectionScreen extends ConsumerStatefulWidget {
   const DetectionScreen({super.key});
 
@@ -17,6 +19,13 @@ class DetectionScreen extends ConsumerStatefulWidget {
 class _DetectionScreenState extends ConsumerState<DetectionScreen> with WidgetsBindingObserver {
   final _sample = TextEditingController();
   String? _testResult;
+
+  /// Set when Android stopped showing the SMS permission dialog.
+  bool _smsBlocked = false;
+  bool _askingSms = false;
+  bool _importing = false;
+  String? _importResult;
+  int _importedCount = 0;
 
   @override
   void initState() {
@@ -44,6 +53,48 @@ class _DetectionScreenState extends ConsumerState<DetectionScreen> with WidgetsB
     ref.invalidate(detectionStatusProvider);
   }
 
+  Future<void> _requestSms() async {
+    setState(() => _askingSms = true);
+    final result = await _service.requestSmsPermission();
+    if (!mounted) return;
+    setState(() {
+      _askingSms = false;
+      _smsBlocked = result == SmsPermissionResult.blocked;
+    });
+    ref.invalidate(detectionStatusProvider);
+    if (result == SmsPermissionResult.granted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Bank SMS will be recorded from now on. Import past messages below.'),
+      ));
+    }
+  }
+
+  Future<void> _import(int days) async {
+    setState(() {
+      _importing = true;
+      _importResult = null;
+    });
+    String message;
+    var added = 0;
+    try {
+      added = await ref.read(detectionSyncProvider).importSms(days);
+      message = added == 0
+          ? 'No new payments found in the last $days days. Payments already in the app are skipped.'
+          : added == 1
+              ? 'Added 1 payment from the last $days days.'
+              : 'Added $added payments from the last $days days.';
+      refreshAll(ref);
+    } catch (e) {
+      message = 'Could not read your messages: $e';
+    }
+    if (!mounted) return;
+    setState(() {
+      _importing = false;
+      _importResult = message;
+      _importedCount = added;
+    });
+  }
+
   Future<void> _test() async {
     final text = _sample.text.trim();
     if (text.isEmpty) return;
@@ -69,6 +120,7 @@ class _DetectionScreenState extends ConsumerState<DetectionScreen> with WidgetsB
       else 'Received $amount${who != null ? ' from $who' : ''}',
       if (p.payeeVpa != null && p.payeeName != null) 'UPI ID: ${p.payeeVpa}',
       if (p.upiRef != null) 'UPI reference: ${p.upiRef}',
+      if (p.account != null) 'Account or card ending: ${p.account}',
       'Method: ${switch (p.mode) { 'card' => 'Card', 'bank' => 'Bank transfer', _ => 'UPI' }}',
     ];
     return lines.join('\n');
@@ -78,7 +130,7 @@ class _DetectionScreenState extends ConsumerState<DetectionScreen> with WidgetsB
   Widget build(BuildContext context) {
     final status = ref.watch(detectionStatusProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text('Detect UPI payments')),
+      appBar: AppBar(title: const Text('Record payments automatically')),
       body: status.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Could not check detection: $e')),
@@ -100,6 +152,7 @@ class _DetectionScreenState extends ConsumerState<DetectionScreen> with WidgetsB
   Widget _body(BuildContext context, DetectionStatus s) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final restrictedTip = s.sdk >= 33;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
@@ -111,11 +164,11 @@ class _DetectionScreenState extends ConsumerState<DetectionScreen> with WidgetsB
               s.isWorking ? Icons.check_circle : Icons.notifications_off_outlined,
               color: s.isWorking ? scheme.onPrimaryContainer : scheme.onSurfaceVariant,
             ),
-            title: Text(s.isWorking ? 'Detection is on' : 'Detection is off'),
+            title: Text(s.isWorking ? 'Recording is on' : 'Recording is off'),
             subtitle: Text(
               s.isWorking
-                  ? 'UPI payments are recorded from your payment apps and bank SMS.'
-                  : 'Finish the steps below to record UPI payments automatically.',
+                  ? 'Money credited and debited is added for you. You pick the category.'
+                  : 'Finish step 1 below to record payments automatically.',
             ),
           ),
         ),
@@ -124,44 +177,60 @@ class _DetectionScreenState extends ConsumerState<DetectionScreen> with WidgetsB
         const SizedBox(height: 8),
         _StepTile(
           number: 1,
-          done: s.accessEnabled,
-          title: 'Allow notification access',
-          subtitle: s.accessEnabled
-              ? 'Allowed'
-              : 'Lets the app read payment messages from Google Pay, PhonePe and your bank SMS.',
-          action: s.accessEnabled
+          done: s.smsPermission,
+          title: 'Read bank SMS',
+          subtitle: s.smsPermission
+              ? 'Allowed. Every credit and debit SMS from your bank is recorded.'
+              : 'Recommended. Records every credit and debit from your bank, for any UPI '
+                  'app, card or transfer, even when message notifications are muted.',
+          action: s.smsPermission
               ? null
               : FilledButton(
+                  onPressed: _askingSms ? null : (_smsBlocked ? _service.openAppInfo : _requestSms),
+                  child: Text(_smsBlocked ? 'Open App info' : 'Allow'),
+                ),
+        ),
+        if (!s.smsPermission && (_smsBlocked || restrictedTip))
+          _Tip(
+            text: _smsBlocked
+                ? 'Android is not showing the permission request. Open App info, tap ⋮ '
+                    '(top right) and choose "Allow restricted settings" if you see it, then '
+                    'go to Permissions > SMS and choose Allow.'
+                : 'If Android says "Restricted setting", open App info, tap ⋮ (top right), '
+                    'choose "Allow restricted settings", then tap Allow here again. Android '
+                    'asks for this for apps installed from an APK file.',
+            action: _smsBlocked
+                ? null
+                : TextButton(onPressed: _service.openAppInfo, child: const Text('Open App info')),
+          ),
+        _StepTile(
+          number: 2,
+          done: s.accessEnabled,
+          title: 'Read payment app notifications',
+          subtitle: s.accessEnabled
+              ? 'Allowed. Google Pay, PhonePe and other UPI apps add the shop or person name.'
+              : 'Optional. Adds names from Google Pay, PhonePe, Paytm and others, and works '
+                  'as a backup if SMS reading is not allowed.',
+          action: s.accessEnabled
+              ? null
+              : OutlinedButton(
                   onPressed: _service.openAccessSettings,
                   child: const Text('Allow'),
                 ),
         ),
-        if (!s.accessEnabled && s.sdk >= 33)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(56, 0, 0, 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Is the switch greyed out? Android blocks this for apps installed '
-                  'outside the Play Store until you allow it: open App info, tap ⋮ '
-                  '(top right), choose "Allow restricted settings", then tap Allow here again.',
-                  style: theme.textTheme.bodySmall,
-                ),
-                TextButton(
-                  onPressed: _service.openAppInfo,
-                  child: const Text('Open App info'),
-                ),
-              ],
-            ),
+        if (!s.accessEnabled && restrictedTip)
+          _Tip(
+            text: 'Is the switch greyed out? Open App info, tap ⋮ (top right), choose '
+                '"Allow restricted settings", then tap Allow here again.',
+            action: TextButton(onPressed: _service.openAppInfo, child: const Text('Open App info')),
           ),
         _StepTile(
-          number: 2,
+          number: 3,
           done: s.canNotify,
           title: 'Show category buttons',
           subtitle: s.canNotify
               ? 'After each payment you get a notification to pick its category in one tap.'
-              : 'Without this, detected payments still appear in "To categorize".',
+              : 'Without this, new payments still appear in "To categorize".',
           action: s.canNotify
               ? null
               : OutlinedButton(
@@ -176,29 +245,83 @@ class _DetectionScreenState extends ConsumerState<DetectionScreen> with WidgetsB
         SwitchListTile(
           value: s.enabled,
           onChanged: _setEnabled,
-          title: const Text('Record UPI payments automatically'),
-          subtitle: const Text('Turn off to pause detection without removing access.'),
+          title: const Text('Record payments automatically'),
+          subtitle: const Text('Turn off to pause recording without removing permissions.'),
         ),
         const Divider(height: 32),
-        Text('Where payments are read from', style: theme.textTheme.titleMedium),
+        Text('Import past bank SMS', style: theme.textTheme.titleMedium),
+        const SizedBox(height: 4),
+        Text(
+          s.smsPermission
+              ? 'Adds credits and debits already in your messages. Payments that are '
+                  'already in the app, or that you deleted, are skipped.'
+              : 'Allow "Read bank SMS" above to import credits and debits already in your messages.',
+          style: theme.textTheme.bodyMedium,
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final days in const [7, 30, 90])
+              OutlinedButton(
+                onPressed: s.smsPermission && !_importing ? () => _import(days) : null,
+                child: Text('Last $days days'),
+              ),
+          ],
+        ),
+        if (_importing)
+          const Padding(
+            padding: EdgeInsets.only(top: 16),
+            child: LinearProgressIndicator(),
+          ),
+        if (_importResult != null) ...[
+          const SizedBox(height: 12),
+          Card.outlined(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(_importResult!),
+                  if (_importedCount > 0)
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: () => Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => const ToCategorizeScreen()),
+                        ),
+                        child: const Text('Choose categories'),
+                      ),
+                    )
+                  else
+                    const SizedBox(height: 8),
+                ],
+              ),
+            ),
+          ),
+        ],
+        const Divider(height: 32),
+        Text('How it works', style: theme.textTheme.titleMedium),
         const SizedBox(height: 8),
         const _InfoRow(
           icon: Icons.sms_outlined,
-          text: 'Bank SMS shown by your messages app (Google Messages, Samsung, Mi and others). '
-              'Works with every UPI app, so keep message notifications turned on.',
+          text: 'Only messages from bank sender IDs (like AX-HDFCBK) are read. Messages from '
+              'people, OTPs, offers, failed payments and reminders are ignored.',
         ),
         const _InfoRow(
-          icon: Icons.apps,
-          text: 'Google Pay, PhonePe, Paytm, BHIM, CRED, Amazon Pay and MobiKwik notifications.',
+          icon: Icons.swap_vert,
+          text: '"Debited", "spent", "paid" and "withdrawn" count as money out. "Credited", '
+              '"received" and "refund" count as money in.',
         ),
         const _InfoRow(
           icon: Icons.merge_type,
-          text: 'If the same payment appears in both, it is saved once.',
+          text: 'If the same payment shows up in an SMS and in a UPI app, it is saved once.',
         ),
         const _InfoRow(
           icon: Icons.lock_outline,
-          text: 'Only payment messages are used. Other notifications, OTPs and chats are ignored '
-              'and never stored. Nothing leaves your phone.',
+          text: 'Only the amount, date, name, UPI ID, reference and last digits of the account '
+              'are kept. Message text is not stored, and nothing leaves your phone.',
         ),
         const Divider(height: 32),
         Text('Check a message', style: theme.textTheme.titleMedium),
@@ -231,6 +354,28 @@ class _DetectionScreenState extends ConsumerState<DetectionScreen> with WidgetsB
           ),
         ],
       ],
+    );
+  }
+}
+
+/// Help text indented under a setup step.
+class _Tip extends StatelessWidget {
+  const _Tip({required this.text, this.action});
+
+  final String text;
+  final Widget? action;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(48, 0, 0, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(text, style: Theme.of(context).textTheme.bodySmall),
+          if (action != null) action!,
+        ],
+      ),
     );
   }
 }

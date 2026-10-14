@@ -21,10 +21,18 @@ def fail(msg: str) -> None:
 # ---------------------------------------------------------------- manifest
 manifest = manifest_path.read_text()
 
-if "POST_NOTIFICATIONS" not in manifest:
+PERMISSIONS = [
+    "android.permission.POST_NOTIFICATIONS",
+    # Read bank SMS directly and import past ones (credit / debit tracking).
+    "android.permission.RECEIVE_SMS",
+    "android.permission.READ_SMS",
+]
+for permission in PERMISSIONS:
+    if permission in manifest:
+        continue
     manifest, n = re.subn(
         r"(\s*)<application",
-        r'\1<uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>\1<application',
+        rf'\1<uses-permission android:name="{permission}"/>\1<application',
         manifest,
         count=1,
     )
@@ -52,12 +60,24 @@ components = """
         <receiver
             android:name=".CategoryActionReceiver"
             android:exported="false" />
+        <receiver
+            android:name=".SmsReceiver"
+            android:permission="android.permission.BROADCAST_SMS"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.provider.Telephony.SMS_RECEIVED" />
+            </intent-filter>
+        </receiver>
     </application>"""
 
 if "PaymentNotificationListener" not in manifest:
     if manifest.count("</application>") != 1:
         fail("expected exactly one </application> in AndroidManifest.xml")
     manifest = manifest.replace("</application>", components.strip() , 1)
+
+for required in ["RECEIVE_SMS", "READ_SMS", "SmsReceiver", "PaymentNotificationListener"]:
+    if required not in manifest:
+        fail(f"{required} missing from AndroidManifest.xml after patching")
 
 manifest_path.write_text(manifest)
 

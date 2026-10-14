@@ -40,4 +40,27 @@ void main() {
     expect(p.payeeName, isNull);
     expect(p.hasPayment, isTrue);
   });
+
+  test('reads account digits and an imported SMS payment', () {
+    final p = DetectedPayment.fromJson({
+      'id': 'sms-0123456789abcdef0123456789abcdef',
+      'amountPaise': 4500000,
+      'isDebit': false,
+      'mode': 'bank',
+      'source': 'sms',
+      'app': 'HDFCBK ••1111',
+      'time': 1759300000000,
+      'payeeName': 'Acme Pvt Ltd',
+      'account': '1111',
+    });
+    expect(p.hasPayment, isTrue);
+    expect(p.isDebit, isFalse);
+    expect(p.account, '1111');
+    expect(p.app, 'HDFCBK ••1111');
+  });
+
+  test('blank account is treated as missing', () {
+    final p = DetectedPayment.fromJson({'id': 'x', 'amountPaise': 100, 'isDebit': true, 'account': ' '});
+    expect(p.account, isNull);
+  });
 }

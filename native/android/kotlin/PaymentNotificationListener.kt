@@ -5,8 +5,6 @@ import android.os.Bundle
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
-import org.json.JSONObject
-import java.util.UUID
 
 /**
  * Reads notifications from UPI apps and SMS apps, picks out completed
@@ -25,8 +23,7 @@ class PaymentNotificationListener : NotificationListenerService() {
 
     private fun handle(sbn: StatusBarNotification) {
         val source = PaymentSources.byPackage[sbn.packageName] ?: return
-        val store = EventStore(this)
-        if (!store.isEnabled()) return
+        if (!EventStore(this).isEnabled()) return
 
         val n = sbn.notification ?: return
         if (n.flags and Notification.FLAG_GROUP_SUMMARY != 0) return
@@ -36,40 +33,30 @@ class PaymentNotificationListener : NotificationListenerService() {
         val body = latestText(extras)
         if (title.isBlank() && body.isBlank()) return
 
-        // For SMS the title is the sender; the message itself is the body.
-        val text = if (source.isSms) body else "$title. $body"
-        val now = sbn.postTime
-        if (!store.markSeen(sbn.packageName, text, now)) return
-
-        val parsed = UpiParser.parse(text, strict = source.isSms) ?: return
-
-        val label = if (source.isSms) {
-            PaymentSources.bankSenderLabel(title) ?: "Bank SMS"
+        if (source.isSms) {
+            // The title is the sender; the message itself is the body. The same
+            // SMS may also be read directly by SmsReceiver, so both share one
+            // "already seen" key and the payment is counted once.
+            PaymentIntake.handle(
+                context = this,
+                text = body,
+                strict = true,
+                kind = "sms",
+                label = PaymentSources.bankSenderLabel(title) ?: "Bank SMS",
+                time = sbn.postTime,
+                seenKey = PaymentIntake.SMS_SEEN_KEY,
+            )
         } else {
-            source.label
+            PaymentIntake.handle(
+                context = this,
+                text = "$title. $body",
+                strict = false,
+                kind = "notification",
+                label = source.label,
+                time = sbn.postTime,
+                seenKey = sbn.packageName,
+            )
         }
-
-        val existingId = store.matchRecent(parsed.amountPaise, parsed.isDebit, parsed.upiRef, now)
-        val id = existingId ?: UUID.randomUUID().toString()
-
-        val event = JSONObject()
-            .put("id", id)
-            .put("amountPaise", parsed.amountPaise)
-            .put("isDebit", parsed.isDebit)
-            .put("mode", parsed.mode)
-            .put("source", if (source.isSms) "sms" else "notification")
-            .put("app", label)
-            .put("time", now)
-        parsed.payeeName?.let { event.put("payeeName", it) }
-        parsed.payeeVpa?.let { event.put("payeeVpa", it) }
-        parsed.upiRef?.let { event.put("upiRef", it) }
-        store.upsert(event)
-
-        if (existingId == null) {
-            store.addRecent(id, parsed.amountPaise, parsed.isDebit, parsed.upiRef, now)
-            PaymentNotifier.showDetected(this, id, parsed, label, store.hints(parsed.isDebit))
-        }
-        PaymentEvents.notifyListeners()
     }
 
     /** Messaging apps keep a conversation; take only the newest message. */

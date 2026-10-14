@@ -8,6 +8,8 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -18,6 +20,9 @@ import org.json.JSONObject
 class MainActivity : FlutterActivity() {
 
     private var channel: MethodChannel? = null
+
+    /** Answer for "requestSmsPermission", sent when the user responds. */
+    private var pendingSmsResult: MethodChannel.Result? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -59,6 +64,7 @@ class MainActivity : FlutterActivity() {
                         "enabled" to store.isEnabled(),
                         "canNotify" to canPostNotifications(),
                         "promoDismissed" to store.isPromoDismissed(),
+                        "smsPermission" to hasSmsPermission(),
                         "sdk" to Build.VERSION.SDK_INT,
                     ),
                 )
@@ -90,6 +96,8 @@ class MainActivity : FlutterActivity() {
                     store.setPromoDismissed(call.arguments as? Boolean ?: true)
                     result.success(null)
                 }
+                "requestSmsPermission" -> requestSmsPermission(result)
+                "importSmsHistory" -> importSmsHistory(call, result)
                 "takeEvents" -> result.success(store.takeAll())
                 "consumeOpenRequest" -> result.success(store.consumeOpenRequest())
                 "setCategoryHints" -> {
@@ -109,6 +117,7 @@ class MainActivity : FlutterActivity() {
                         p.payeeName?.let { o.put("payeeName", it) }
                         p.payeeVpa?.let { o.put("payeeVpa", it) }
                         p.upiRef?.let { o.put("upiRef", it) }
+                        p.account?.let { o.put("account", it) }
                         result.success(o.toString())
                     }
                 }
@@ -117,6 +126,65 @@ class MainActivity : FlutterActivity() {
         } catch (e: Exception) {
             result.error("detection_error", e.message, null)
         }
+    }
+
+    // ------------------------------------------------------------ SMS
+
+    private fun hasSmsPermission(): Boolean =
+        SMS_PERMISSIONS.all { checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED }
+
+    /**
+     * Replies "granted", "denied" (can ask again) or "blocked" (Android will
+     * not show the dialog: the user must allow it in App info, and on
+     * Android 15+ first allow restricted settings for apps installed from an APK).
+     */
+    private fun requestSmsPermission(result: MethodChannel.Result) {
+        if (hasSmsPermission()) {
+            result.success("granted")
+            return
+        }
+        if (pendingSmsResult != null) {
+            result.error("busy", "Already asking for SMS permission", null)
+            return
+        }
+        pendingSmsResult = result
+        requestPermissions(SMS_PERMISSIONS, REQUEST_SMS)
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray,
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != REQUEST_SMS) return
+        val result = pendingSmsResult ?: return
+        pendingSmsResult = null
+        val answer = when {
+            hasSmsPermission() -> "granted"
+            SMS_PERMISSIONS.any { shouldShowRequestPermissionRationale(it) } -> "denied"
+            else -> "blocked"
+        }
+        result.success(answer)
+    }
+
+    /** Reads the inbox off the main thread; replies with a JSON array of payments. */
+    private fun importSmsHistory(call: MethodCall, result: MethodChannel.Result) {
+        if (!hasSmsPermission()) {
+            result.error("no_permission", "SMS permission is not granted", null)
+            return
+        }
+        val days = (call.arguments as? Number)?.toInt()?.coerceIn(1, 365) ?: 30
+        val since = System.currentTimeMillis() - days * DAY_MS
+        val main = Handler(Looper.getMainLooper())
+        Thread {
+            try {
+                val json = SmsInbox.readPayments(applicationContext, since)
+                main.post { result.success(json) }
+            } catch (e: Exception) {
+                main.post { result.error("import_failed", e.message, null) }
+            }
+        }.start()
     }
 
     private fun listenerComponent() = ComponentName(this, PaymentNotificationListener::class.java)
@@ -166,5 +234,11 @@ class MainActivity : FlutterActivity() {
 
     companion object {
         private const val CHANNEL = "expense_tracker/upi_detection"
+        private const val REQUEST_SMS = 1002
+        private const val DAY_MS = 24L * 60 * 60 * 1000
+        private val SMS_PERMISSIONS = arrayOf(
+            Manifest.permission.RECEIVE_SMS,
+            Manifest.permission.READ_SMS,
+        )
     }
 }

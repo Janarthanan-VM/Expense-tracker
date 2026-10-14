@@ -1,4 +1,4 @@
-# Expense Tracker (Flutter) — Step 1: Foundation
+# Expense Tracker (Flutter) — v0.4.0
 
 This step gives you a working app with:
 
@@ -12,6 +12,15 @@ This step gives you a working app with:
 - **Cash and other payments**: every entry records how you paid (Cash, UPI,
   Card, Bank, Other). Manual entries default to Cash. Filter the list by
   method, and see this month's cash vs UPI spending on the home screen
+- **Credit and debit tracking from bank SMS (v0.4.0, Android)**: with the SMS
+  permission, every credit and debit SMS from your bank is read the moment it
+  arrives (even when message notifications are muted) and saved with its
+  amount, date, name, UPI ID, reference and the last digits of the account or
+  card. Import past bank SMS from the last 7, 30 or 90 days. Payments already
+  saved, or that you deleted, are skipped. Home shows money in, money out and
+  what you kept this month; the Transactions list filters Money in / Money out
+  and shows totals. Only bank sender IDs (like AX-HDFCBK) are read; message
+  text is never stored.
 - **Automatic UPI detection (Android)**: payments are read from bank SMS
   notifications and from Google Pay, PhonePe, Paytm, BHIM, CRED, Amazon Pay
   and MobiKwik notifications. Each payment is saved and a notification offers
@@ -20,12 +29,12 @@ This step gives you a working app with:
 
 ### Android code
 
-`native/android/` holds the Kotlin code (notification listener, parser,
-notification buttons) and `tool/patch_android.py` adds the permissions and
+`native/android/` holds the Kotlin code (notification listener, SMS
+receiver, SMS inbox import, parser, notification buttons) and `tool/patch_android.py` adds the permissions and
 components to the generated Android project. The GitHub workflow copies both
 in and runs the parser's unit tests (`native/android/test/`).
 
-Coming next: backup & restore, Scan & Pay, automatic detection from UPI notifications.
+Coming next: backup & restore, Scan & Pay.
 
 ---
 

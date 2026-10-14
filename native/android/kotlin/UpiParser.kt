@@ -11,6 +11,8 @@ data class ParsedPayment(
     val payeeVpa: String?,
     val upiRef: String?,
     val mode: String,
+    /** Last digits of your bank account or card, e.g. "1234" from "A/c XX1234". */
+    val account: String? = null,
 )
 
 /**
@@ -79,6 +81,12 @@ object UpiParser {
         IC,
     )
 
+    /** "A/c XX1234", "Acct *123", "card ending 1234", "A/c no. 5678". */
+    private val ACCOUNT = Regex(
+        """\b(?:a/c|a/c\.|ac|acct|account|card)(?:\s*(?:no\.?|number|ending(?:\s+(?:with|in))?))?\s*[:.]?\s*(?:[x*.]+\s*)?([0-9]{3,6})\b""",
+        IC,
+    )
+
     /** Extra words a bank SMS must contain, so personal messages are ignored. */
     private val BANK_CUES = Regex("""\b(a/c|acct|account|upi|vpa|card|bank|neft|imps|rtgs|ref|txn)\b""", IC)
 
@@ -110,6 +118,7 @@ object UpiParser {
             payeeVpa = payeeVpa?.lowercase(),
             upiRef = findRef(text),
             mode = mode(text),
+            account = ACCOUNT.find(text)?.groupValues?.get(1),
         )
     }
 

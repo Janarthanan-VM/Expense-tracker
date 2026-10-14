@@ -167,4 +167,71 @@ class UpiParserTest {
         assertEquals("McDonald's", UpiParser.tidyName("McDonald's"))
         assertEquals("Big Bazaar", UpiParser.tidyName("BIG  BAZAAR"))
     }
+
+    // ------------------------------------------------------------ account digits (v0.4.0)
+
+    @Test fun readsAccountDigitsFromDebit() {
+        val p = parse(
+            "Sent Rs.250.00 From HDFC Bank A/C *1234 To SRI KRISHNA STORES On 13/10/26 Ref 428612345678",
+            strict = true,
+        )
+        assertEquals("1234", p.account)
+    }
+
+    @Test fun readsAccountDigitsWithXPrefix() {
+        val p = parse(
+            "Dear UPI user A/C X5678 debited by 120.0 on date 13Oct26 trf to RAVI KUMAR Refno 428698765432",
+            strict = true,
+        )
+        assertEquals("5678", p.account)
+    }
+
+    @Test fun readsAccountDigitsFromCredit() {
+        val p = parse(
+            "Rs 1,000.00 credited to a/c XX4321 on 13-10-26 by a/c linked to VPA ravi@okicici (UPI Ref No 428677778888).",
+            strict = true,
+        )
+        assertFalse(p.isDebit)
+        assertEquals("4321", p.account)
+    }
+
+    @Test fun readsCardEndingDigits() {
+        val p = parse(
+            "Rs.899.00 spent on your SBI Credit Card ending 9876 at SWIGGY on 13/10/26. Avl Lmt Rs.45,000",
+            strict = true,
+        )
+        assertEquals("9876", p.account)
+    }
+
+    @Test fun accountNoWithDots() {
+        val p = parse(
+            "INR 1,200.00 debited A/c no. XX2468 13-10-26, 10:15:21 UPI/P2M/428633334444/AMAZON PAY",
+            strict = true,
+        )
+        assertEquals("2468", p.account)
+    }
+
+    @Test fun noAccountInAppNotification() {
+        assertNull(parse("Paid ₹150 to Chai Point").account)
+    }
+
+    @Test fun salaryCreditViaNeft() {
+        val p = parse(
+            "Your A/c XX1111 is credited with INR 45,000.00 on 01-10-26 by NEFT from ACME PVT LTD. Avl Bal INR 52,300.00",
+            strict = true,
+        )
+        assertFalse(p.isDebit)
+        assertEquals(4500000L, p.amountPaise)
+        assertEquals("bank", p.mode)
+        assertEquals("1111", p.account)
+    }
+
+    @Test fun atmWithdrawalIsDebit() {
+        val p = parse(
+            "Rs.2000.00 withdrawn at ATM from A/c XX3333 on 13-10-26. Avl Bal Rs.8,000.00",
+            strict = true,
+        )
+        assertTrue(p.isDebit)
+        assertEquals(200000L, p.amountPaise)
+    }
 }
