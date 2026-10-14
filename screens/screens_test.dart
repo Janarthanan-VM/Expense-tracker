@@ -169,7 +169,9 @@ void main() {
 
   testWidgets('category picker', (tester) async {
     await start(tester, ThemeMode.light);
-    await tester.longPress(find.text('Chai Point').first);
+    await tester.tap(find.byType(FloatingActionButton));
+    await _settle(tester);
+    await tester.tap(find.text('Choose category'));
     await _settle(tester);
     await _shot('5-picker');
   });

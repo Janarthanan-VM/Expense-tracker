@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../categories/categories_screen.dart';
+import '../detection/detection_service.dart';
 import '../settings/settings_screen.dart';
 import '../transactions/add_transaction_screen.dart';
 import '../transactions/categorize_action.dart';
@@ -28,18 +29,22 @@ class _AppShellState extends ConsumerState<AppShell> with WidgetsBindingObserver
     const SettingsScreen(),
   ];
 
+  /// Kept so dispose() can unhook it; "ref" may not be used in dispose().
+  late final DetectionService _detection;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    ref.read(detectionServiceProvider).onEventsAvailable = _syncDetected;
+    _detection = ref.read(detectionServiceProvider);
+    _detection.onEventsAvailable = _syncDetected;
     WidgetsBinding.instance.addPostFrameCallback((_) => _syncDetected());
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    ref.read(detectionServiceProvider).onEventsAvailable = null;
+    _detection.onEventsAvailable = null;
     super.dispose();
   }
 
