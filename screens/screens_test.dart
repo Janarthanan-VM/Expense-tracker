@@ -171,7 +171,7 @@ void main() {
     await start(tester, ThemeMode.light);
     await tester.tap(find.byType(FloatingActionButton));
     await _settle(tester);
-    await tester.tap(find.text('Choose category'));
+    await tester.tap(find.text('Choose category').last);
     await _settle(tester);
     await _shot('5-picker');
   });
