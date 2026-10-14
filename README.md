@@ -1,6 +1,13 @@
-# Expense Tracker (Flutter) — v0.4.0
+# Expense Tracker (Flutter) — v0.5.0
 
 This step gives you a working app with:
+
+- **Modern, minimal design (v0.5.0)**: Manrope font bundled in the app,
+  a calm grey/white palette with one marigold accent for things that need
+  attention, money out in ink and money in in green, daily spending bars on
+  Home, day-grouped transactions with day totals, and an amount-first add
+  screen. Light and dark mode. Design tokens live in
+  `lib/core/theme/app_theme.dart`; shared pieces in `lib/core/theme/ui.dart`.
 
 - Encrypted on-device database (SQLCipher, key kept in Android Keystore)
 - 19 default categories (expense, income, transfer) + create / rename / hide your own
@@ -26,6 +33,13 @@ This step gives you a working app with:
   and MobiKwik notifications. Each payment is saved and a notification offers
   one-tap category buttons. Duplicates (app + SMS for the same payment) are
   merged. Set it up in Settings > Detect UPI payments automatically.
+
+### Fonts and screenshots
+
+`assets/fonts/` holds Manrope (SIL Open Font License, see `OFL.txt`);
+`tool/patch_pubspec.py` registers it in the generated project. On every push
+to main, CI renders the main screens with sample data (`screens/`) and
+publishes them to the **UI preview** release on GitHub.
 
 ### Android code
 

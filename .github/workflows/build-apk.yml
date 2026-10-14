@@ -29,6 +29,7 @@ jobs:
           rm -f app/lib/main.dart app/test/widget_test.dart
           cp -r lib/. app/lib/
           cp -r test/. app/test/
+          cp -r assets app/assets
 
       - name: Copy Android code (payment detection)
         run: |
@@ -45,6 +46,10 @@ jobs:
       - name: Add packages
         working-directory: app
         run: flutter pub add flutter_riverpod:^2.6.1 sqflite_sqlcipher path flutter_secure_storage uuid intl
+
+      - name: Bundle fonts
+        working-directory: app
+        run: python3 ../tool/patch_pubspec.py
 
       - name: Android settings (permissions, payment listener, minSdk 23+, no auto-backup)
         working-directory: app
@@ -73,6 +78,29 @@ jobs:
       - name: Report Android test results
         if: always()
         run: python3 tool/report_junit.py app gradle-test.log
+
+      - name: Screenshots (design review)
+        id: screens
+        continue-on-error: true
+        working-directory: app
+        run: |
+          mkdir -p test_screens
+          cp ../screens/*.dart test_screens/
+          flutter_root="$(dirname "$(dirname "$(command -v flutter)")")"
+          cp "$flutter_root/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf" test_screens/
+          flutter test test_screens --update-goldens
+          ls -la test_screens/out
+
+      - name: Publish screenshots (ui-preview release)
+        if: github.ref == 'refs/heads/main' && steps.screens.outcome == 'success'
+        continue-on-error: true
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ui-preview
+          name: UI preview (latest screenshots)
+          prerelease: true
+          make_latest: false
+          files: app/test_screens/out/*.png
 
       - uses: actions/upload-artifact@v4
         with:

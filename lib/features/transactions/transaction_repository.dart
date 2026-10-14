@@ -364,6 +364,29 @@ class TransactionRepository {
     return rows.map(Txn.fromMap).toList();
   }
 
+  /// Spending per day of the month (index 0 = the 1st), counted the same way
+  /// as the month total: successful debits, excluding transfers.
+  Future<List<int>> dailySpend(DateTime anyDayInMonth) async {
+    final start = DateTime(anyDayInMonth.year, anyDayInMonth.month);
+    final end = DateTime(anyDayInMonth.year, anyDayInMonth.month + 1);
+    final days = end.difference(start).inDays;
+    final rows = await _db.rawQuery('''
+      SELECT t.txn_time AS at, t.amount_paise AS amount
+      FROM transactions t
+      LEFT JOIN categories c ON c.id = t.category_id
+      WHERE t.deleted_at IS NULL AND t.status = 'success' AND t.type = 'debit'
+        AND t.txn_time >= ? AND t.txn_time < ?
+        AND (c.kind IS NULL OR c.kind = 'expense')
+    ''', [start.millisecondsSinceEpoch, end.millisecondsSinceEpoch]);
+    final totals = List<int>.filled(days, 0);
+    for (final r in rows) {
+      // Day of month in the phone's own time zone.
+      final day = DateTime.fromMillisecondsSinceEpoch(r['at']! as int).day;
+      if (day >= 1 && day <= days) totals[day - 1] += r['amount']! as int;
+    }
+    return totals;
+  }
+
   Future<MonthSummary> monthSummary(DateTime anyDayInMonth) async {
     final start = DateTime(anyDayInMonth.year, anyDayInMonth.month);
     final end = DateTime(anyDayInMonth.year, anyDayInMonth.month + 1);

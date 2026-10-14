@@ -43,6 +43,11 @@ final monthSummaryProvider = FutureProvider<MonthSummary>(
   (ref) => ref.watch(txnRepoProvider).monthSummary(DateTime.now()),
 );
 
+/// This month's spending per day, for the bars on Home.
+final dailySpendProvider = FutureProvider<List<int>>(
+  (ref) => ref.watch(txnRepoProvider).dailySpend(DateTime.now()),
+);
+
 /// Filters for the transaction list. A record, so equal filters share a cache.
 /// [type]: null = all, debit = money out, credit = money in.
 typedef TxnFilter = ({String search, PaymentMode? mode, TxnType? type});
@@ -60,6 +65,7 @@ void refreshAll(WidgetRef ref) {
   ref.invalidate(recentTxnsProvider);
   ref.invalidate(toCategorizeProvider);
   ref.invalidate(monthSummaryProvider);
+  ref.invalidate(dailySpendProvider);
   ref.invalidate(txnListProvider);
 }
 

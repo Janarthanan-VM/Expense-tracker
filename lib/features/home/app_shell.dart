@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
+import '../../core/theme/app_theme.dart';
 import '../categories/categories_screen.dart';
 import '../settings/settings_screen.dart';
 import '../transactions/add_transaction_screen.dart';
@@ -20,11 +21,11 @@ class AppShell extends ConsumerStatefulWidget {
 class _AppShellState extends ConsumerState<AppShell> with WidgetsBindingObserver {
   int _index = 0;
 
-  static const _pages = <Widget>[
-    HomeScreen(),
-    TransactionListScreen(),
-    CategoriesScreen(),
-    SettingsScreen(),
+  late final List<Widget> _pages = [
+    HomeScreen(onSeeAll: () => setState(() => _index = 1)),
+    const TransactionListScreen(),
+    const CategoriesScreen(),
+    const SettingsScreen(),
   ];
 
   @override
@@ -79,21 +80,42 @@ class _AppShellState extends ConsumerState<AppShell> with WidgetsBindingObserver
     return Scaffold(
       body: IndexedStack(index: _index, children: _pages),
       floatingActionButton: _index <= 1
-          ? FloatingActionButton.extended(
+          ? FloatingActionButton(
+              tooltip: 'Add transaction',
               onPressed: () => openTransactionEditor(context),
-              icon: const Icon(Icons.add),
-              label: const Text('Add expense'),
+              child: const Icon(Icons.add, size: 28),
             )
           : null,
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _index,
-        onDestinationSelected: (i) => setState(() => _index = i),
-        destinations: const [
-          NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Home'),
-          NavigationDestination(icon: Icon(Icons.receipt_long_outlined), selectedIcon: Icon(Icons.receipt_long), label: 'Transactions'),
-          NavigationDestination(icon: Icon(Icons.category_outlined), selectedIcon: Icon(Icons.category), label: 'Categories'),
-          NavigationDestination(icon: Icon(Icons.settings_outlined), selectedIcon: Icon(Icons.settings), label: 'Settings'),
-        ],
+      bottomNavigationBar: DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border(top: BorderSide(color: context.palette.line)),
+        ),
+        child: NavigationBar(
+          selectedIndex: _index,
+          onDestinationSelected: (i) => setState(() => _index = i),
+          destinations: const [
+            NavigationDestination(
+              icon: Icon(Icons.space_dashboard_outlined),
+              selectedIcon: Icon(Icons.space_dashboard),
+              label: 'Home',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.receipt_long_outlined),
+              selectedIcon: Icon(Icons.receipt_long),
+              label: 'Transactions',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.donut_large_outlined),
+              selectedIcon: Icon(Icons.donut_large),
+              label: 'Categories',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.tune_outlined),
+              selectedIcon: Icon(Icons.tune),
+              label: 'Settings',
+            ),
+          ],
+        ),
       ),
     );
   }

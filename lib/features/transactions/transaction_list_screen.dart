@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/ui.dart';
 import '../../core/utils/formatters.dart';
 import 'add_transaction_screen.dart';
 import 'categorize_action.dart';
@@ -48,134 +49,174 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
       appBar: AppBar(
         title: const Text('Transactions'),
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(116),
+          preferredSize: const Size.fromHeight(118),
           child: Column(
             children: [
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                padding: const EdgeInsets.fromLTRB(kGutter - 4, 4, kGutter - 4, 10),
                 child: SearchBar(
-                  hintText: 'Search payee, UPI ID or note',
-                  leading: const Icon(Icons.search),
-                  elevation: const WidgetStatePropertyAll(0),
+                  hintText: 'Search name, UPI ID or note',
+                  leading: Icon(Icons.search, color: context.palette.muted),
                   onChanged: _onSearchChanged,
                 ),
               ),
               SizedBox(
-                height: 48,
+                height: 50,
                 child: ListView(
                   scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  padding: const EdgeInsets.fromLTRB(kGutter - 4, 2, kGutter - 4, 8),
                   children: [
-                    Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: ChoiceChip(
-                        label: const Text('All'),
-                        selected: _mode == null && _type == null,
-                        showCheckmark: false,
-                        onSelected: (_) => setState(() {
-                          _mode = null;
-                          _type = null;
-                        }),
-                      ),
+                    Pill(
+                      label: 'All',
+                      selected: _mode == null && _type == null,
+                      onTap: () => setState(() {
+                        _mode = null;
+                        _type = null;
+                      }),
                     ),
+                    const SizedBox(width: 8),
                     for (final (type, label, icon) in const [
                       (TxnType.credit, 'Money in', Icons.south_west),
                       (TxnType.debit, 'Money out', Icons.north_east),
-                    ])
-                      Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: ChoiceChip(
-                          avatar: Icon(icon, size: 18),
-                          label: Text(label),
-                          selected: _type == type,
-                          showCheckmark: false,
-                          onSelected: (_) =>
-                              setState(() => _type = _type == type ? null : type),
-                        ),
+                    ]) ...[
+                      Pill(
+                        label: label,
+                        icon: icon,
+                        selected: _type == type,
+                        onTap: () => setState(() => _type = _type == type ? null : type),
                       ),
-                    const Padding(
-                      padding: EdgeInsets.fromLTRB(0, 10, 8, 10),
-                      child: VerticalDivider(width: 1),
+                      const SizedBox(width: 8),
+                    ],
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(4, 8, 12, 8),
+                      child: VerticalDivider(width: 1, color: context.palette.line),
                     ),
-                    for (final mode in PaymentMode.values)
-                      Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: ChoiceChip(
-                          avatar: Icon(mode.icon, size: 18),
-                          label: Text(mode.shortLabel),
-                          selected: _mode == mode,
-                          showCheckmark: false,
-                          onSelected: (_) =>
-                              setState(() => _mode = _mode == mode ? null : mode),
-                        ),
+                    for (final mode in PaymentMode.values) ...[
+                      Pill(
+                        label: mode.shortLabel,
+                        icon: mode.icon,
+                        selected: _mode == mode,
+                        onTap: () => setState(() => _mode = _mode == mode ? null : mode),
                       ),
+                      const SizedBox(width: 8),
+                    ],
                   ],
                 ),
               ),
-              const SizedBox(height: 4),
             ],
           ),
         ),
       ),
       body: txns.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Could not load transactions: $e')),
+        skipLoadingOnReload: true,
+        loading: () => const SizedBox.shrink(),
+        error: (e, _) => EmptyState(
+          icon: Icons.error_outline,
+          title: 'Could not load transactions',
+          message: '$e',
+        ),
         data: (list) {
           if (list.isEmpty) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(32),
-                child: Text(
-                  _search.isNotEmpty
-                      ? 'Nothing matches "$_search".'
-                      : filtered
-                          ? 'No transactions match these filters.'
-                          : 'No transactions yet. Tap Add expense to record a cash or UPI payment.',
-                  textAlign: TextAlign.center,
-                ),
-              ),
+            return EmptyState(
+              icon: _search.isNotEmpty ? Icons.search_off : Icons.receipt_long_outlined,
+              title: _search.isNotEmpty
+                  ? 'Nothing matches "$_search"'
+                  : filtered
+                      ? 'No transactions match these filters'
+                      : 'No transactions yet',
+              message: filtered ? null : 'Tap + to add a cash or UPI payment.',
             );
           }
 
-          // Flatten into a totals row, day headers and transaction rows.
-          final items = <Object>[if (filtered) _Totals.of(list)];
-          DateTime? lastDay;
-          for (final t in list) {
-            final day = DateTime(t.txnTime.year, t.txnTime.month, t.txnTime.day);
-            if (day != lastDay) {
-              items.add(day);
-              lastDay = day;
-            }
-            items.add(t);
-          }
-
+          final days = _groupByDay(list);
           return ListView.builder(
-            padding: const EdgeInsets.only(bottom: 96),
-            itemCount: items.length,
+            padding: const EdgeInsets.only(bottom: 120),
+            itemCount: days.length + (filtered ? 1 : 0),
             itemBuilder: (context, i) {
-              final item = items[i];
-              if (item is _Totals) return _TotalsBar(totals: item);
-              if (item is DateTime) {
-                return Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-                  child: Text(
-                    formatDayHeader(item),
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          color: Theme.of(context).colorScheme.primary,
+              if (filtered && i == 0) return _TotalsBar(totals: _Totals.of(list));
+              final day = days[i - (filtered ? 1 : 0)];
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _DayHeader(day: day.date, outPaise: day.outPaise, inPaise: day.inPaise),
+                  Group(
+                    children: [
+                      for (final t in day.txns)
+                        TransactionTile(
+                          txn: t,
+                          category: categories[t.categoryId],
+                          onTap: () => openTransactionEditor(context, existing: t),
+                          onLongPress: () => categorizeTransaction(context, ref, t),
                         ),
+                    ],
                   ),
-                );
-              }
-              final t = item as Txn;
-              return TransactionTile(
-                txn: t,
-                category: categories[t.categoryId],
-                onTap: () => openTransactionEditor(context, existing: t),
-                onLongPress: () => categorizeTransaction(context, ref, t),
+                ],
               );
             },
           );
         },
+      ),
+    );
+  }
+
+  static List<_Day> _groupByDay(List<Txn> list) {
+    final days = <_Day>[];
+    for (final t in list) {
+      final date = DateTime(t.txnTime.year, t.txnTime.month, t.txnTime.day);
+      if (days.isEmpty || days.last.date != date) days.add(_Day(date));
+      days.last.add(t);
+    }
+    return days;
+  }
+}
+
+class _Day {
+  _Day(this.date);
+
+  final DateTime date;
+  final List<Txn> txns = [];
+  int outPaise = 0;
+  int inPaise = 0;
+
+  void add(Txn t) {
+    txns.add(t);
+    if (t.status == TxnStatus.failed) return;
+    if (t.type == TxnType.debit) {
+      outPaise += t.amountPaise;
+    } else {
+      inPaise += t.amountPaise;
+    }
+  }
+}
+
+class _DayHeader extends StatelessWidget {
+  const _DayHeader({required this.day, required this.outPaise, required this.inPaise});
+
+  final DateTime day;
+  final int outPaise;
+  final int inPaise;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    final t = Theme.of(context).textTheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(kGutter, 24, kGutter, 10),
+      child: Row(
+        children: [
+          Expanded(child: Text(formatDayHeader(day), style: t.titleSmall)),
+          if (inPaise > 0)
+            Text(
+              '+${formatPaise(inPaise)}',
+              style: t.bodySmall?.copyWith(color: p.moneyIn, fontFeatures: kTabular),
+            ),
+          if (inPaise > 0 && outPaise > 0) const SizedBox(width: 12),
+          if (outPaise > 0)
+            Text(
+              '−${formatPaise(outPaise)}',
+              style: t.bodySmall?.copyWith(fontFeatures: kTabular),
+            ),
+        ],
       ),
     );
   }
@@ -211,27 +252,36 @@ class _TotalsBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-      child: Wrap(
-        spacing: 16,
-        runSpacing: 4,
-        children: [
-          Text(
-            totals.count == 1 ? '1 transaction' : '${totals.count} transactions',
-            style: theme.textTheme.bodyMedium,
+    final p = context.palette;
+    final t = Theme.of(context).textTheme;
+    Widget figure(String label, String value, Color color) => Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: t.bodySmall),
+              const SizedBox(height: 2),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  value,
+                  style: t.titleLarge?.copyWith(color: color, fontFeatures: kTabular),
+                ),
+              ),
+            ],
           ),
-          if (totals.inPaise > 0)
-            Text(
-              'In ${formatPaise(totals.inPaise)}',
-              style: theme.textTheme.bodyMedium?.copyWith(color: AppTheme.income),
-            ),
-          if (totals.outPaise > 0)
-            Text(
-              'Out ${formatPaise(totals.outPaise)}',
-              style: theme.textTheme.bodyMedium?.copyWith(color: AppTheme.expense),
-            ),
+        );
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(kGutter, 12, kGutter, 0),
+      child: Row(
+        children: [
+          figure('Money in', formatPaise(totals.inPaise), p.moneyIn),
+          figure('Money out', formatPaise(totals.outPaise), p.moneyOut),
+          figure(
+            'Transactions',
+            '${totals.count}',
+            p.ink,
+          ),
         ],
       ),
     );

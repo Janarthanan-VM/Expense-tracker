@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
+import '../../core/theme/app_theme.dart';
+import '../../core/theme/ui.dart';
 import 'category.dart';
 import 'category_icons.dart';
 
@@ -16,50 +18,50 @@ class CategoriesScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Categories'),
         actions: [
-          IconButton(
-            tooltip: 'New category',
-            icon: const Icon(Icons.add),
-            onPressed: () => _addCategory(context, ref),
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: OutlinedButton.icon(
+              onPressed: () => _addCategory(context, ref),
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('New'),
+            ),
           ),
         ],
       ),
       body: categories.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Could not load categories: $e')),
+        skipLoadingOnReload: true,
+        loading: () => const SizedBox.shrink(),
+        error: (e, _) => EmptyState(
+          icon: Icons.error_outline,
+          title: 'Could not load categories',
+          message: '$e',
+        ),
         data: (list) => ListView(
-          padding: const EdgeInsets.only(bottom: 32),
+          padding: const EdgeInsets.only(bottom: 40),
           children: [
-            for (final kind in CategoryKind.values) ...[
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 20, 16, 4),
-                child: Text(
-                  kind.label,
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(kGutter, 0, kGutter, 0),
+              child: Text(
+                'Tap a category to rename it. Switch one off to hide it from the picker; '
+                'payments already in it keep it.',
+                style: Theme.of(context).textTheme.bodySmall,
               ),
-              for (final c in list.where((c) => c.kind == kind))
-                ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: c.color.withValues(alpha: c.isHidden ? 0.05 : 0.14),
-                    foregroundColor: c.isHidden ? Theme.of(context).disabledColor : c.color,
-                    child: Icon(c.icon),
-                  ),
-                  title: Text(
-                    c.name,
-                    style: c.isHidden ? TextStyle(color: Theme.of(context).disabledColor) : null,
-                  ),
-                  subtitle: c.isHidden ? const Text('Hidden from the picker') : null,
-                  onTap: () => _rename(context, ref, c),
-                  trailing: Switch(
-                    value: !c.isHidden,
-                    onChanged: (show) async {
-                      await ref.read(categoryRepoProvider).setHidden(c.id, !show);
-                      refreshAll(ref);
-                    },
-                  ),
-                ),
+            ),
+            for (final kind in CategoryKind.values) ...[
+              SectionHeader(kind.label),
+              Group(
+                children: [
+                  for (final c in list.where((c) => c.kind == kind))
+                    _CategoryRow(
+                      category: c,
+                      onTap: () => _rename(context, ref, c),
+                      onVisible: (show) async {
+                        await ref.read(categoryRepoProvider).setHidden(c.id, !show);
+                        refreshAll(ref);
+                      },
+                    ),
+                ],
+              ),
             ],
           ],
         ),
@@ -249,6 +251,52 @@ class _NewCategoryDialogState extends State<_NewCategoryDialog> {
           child: const Text('Create'),
         ),
       ],
+    );
+  }
+}
+
+class _CategoryRow extends StatelessWidget {
+  const _CategoryRow({required this.category, required this.onTap, required this.onVisible});
+
+  final TxnCategory category;
+  final VoidCallback onTap;
+  final ValueChanged<bool> onVisible;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    final t = Theme.of(context).textTheme;
+    final c = category;
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 10, 8, 10),
+        child: Row(
+          children: [
+            Opacity(
+              opacity: c.isHidden ? 0.4 : 1,
+              child: IconTile(icon: c.icon, color: c.color),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    c.name,
+                    style: t.titleSmall?.copyWith(
+                      fontSize: 15,
+                      color: c.isHidden ? p.faint : p.ink,
+                    ),
+                  ),
+                  if (c.isHidden) Text('Hidden from the picker', style: t.bodySmall),
+                ],
+              ),
+            ),
+            Switch(value: !c.isHidden, onChanged: onVisible),
+          ],
+        ),
+      ),
     );
   }
 }

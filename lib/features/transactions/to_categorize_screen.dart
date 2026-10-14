@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
+import '../../core/theme/ui.dart';
 import 'categorize_action.dart';
 import 'transaction_tile.dart';
 
@@ -17,41 +18,46 @@ class ToCategorizeScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('To categorize')),
       body: pending.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Could not load payments: $e')),
+        skipLoadingOnReload: true,
+        loading: () => const SizedBox.shrink(),
+        error: (e, _) => EmptyState(
+          icon: Icons.error_outline,
+          title: 'Could not load payments',
+          message: '$e',
+        ),
         data: (list) {
           if (list.isEmpty) {
-            return const Center(
-              child: Padding(
-                padding: EdgeInsets.all(32),
-                child: Text(
-                  'All payments have a category. New ones will appear here.',
-                  textAlign: TextAlign.center,
-                ),
-              ),
+            return const EmptyState(
+              icon: Icons.task_alt,
+              title: 'All caught up',
+              message: 'Every payment has a category. New ones will show up here.',
             );
           }
-          return ListView.separated(
-            itemCount: list.length + 1,
-            separatorBuilder: (context, index) => const Divider(height: 1, indent: 72),
-            itemBuilder: (context, i) {
-              if (i == 0) {
-                return Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-                  child: Text(
-                    'Tap a payment to choose its category. Suggested ones only need a tap to confirm.',
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                );
-              }
-              final t = list[i - 1];
-              return TransactionTile(
-                txn: t,
-                category: categories[t.categoryId],
-                showDate: true,
-                onTap: () => categorizeTransaction(context, ref, t),
-              );
-            },
+          return ListView(
+            padding: const EdgeInsets.only(bottom: 40),
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(kGutter, 4, kGutter, 16),
+                child: Text(
+                  list.length == 1
+                      ? '1 payment. Tap it to choose a category.'
+                      : '${list.length} payments. Tap one to choose its category; '
+                          'suggested ones need just a tap to confirm.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
+              Group(
+                children: [
+                  for (final t in list)
+                    TransactionTile(
+                      txn: t,
+                      category: categories[t.categoryId],
+                      showDate: true,
+                      onTap: () => categorizeTransaction(context, ref, t),
+                    ),
+                ],
+              ),
+            ],
           );
         },
       ),

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../core/theme/app_theme.dart';
+import '../../core/theme/ui.dart';
 import '../transactions/txn.dart';
 import 'category.dart';
 
@@ -60,35 +62,58 @@ class _CategoryPickerBodyState extends State<_CategoryPickerBody> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final p = context.palette;
+    final t = Theme.of(context).textTheme;
     final payee = widget.payeeLabel;
 
     return SafeArea(
       child: ConstrainedBox(
-        constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.8),
+        constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.82),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-              child: Text('Choose category', style: theme.textTheme.titleLarge),
+              padding: const EdgeInsets.fromLTRB(kGutter, 0, kGutter, 4),
+              child: Text('Choose category', style: t.titleLarge),
             ),
             if (payee != null)
-              CheckboxListTile(
-                value: _remember,
-                onChanged: (v) => setState(() => _remember = v ?? false),
-                title: Text('Always use this for $payee'),
-                subtitle: const Text('Also updates earlier uncategorized payments'),
-                controlAffinity: ListTileControlAffinity.leading,
+              InkWell(
+                onTap: () => setState(() => _remember = !_remember),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(kGutter - 8, 4, kGutter, 4),
+                  child: Row(
+                    children: [
+                      Checkbox(
+                        value: _remember,
+                        onChanged: (v) => setState(() => _remember = v ?? false),
+                      ),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Always use for $payee',
+                              style: t.bodyMedium,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            Text('Earlier uncategorized payments update too', style: t.bodySmall),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             Flexible(
               child: GridView.builder(
                 shrinkWrap: true,
-                padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 20),
                 gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                  maxCrossAxisExtent: 104,
-                  mainAxisExtent: 96,
+                  maxCrossAxisExtent: 96,
+                  mainAxisExtent: 98,
                   mainAxisSpacing: 4,
                   crossAxisSpacing: 4,
                 ),
@@ -96,40 +121,36 @@ class _CategoryPickerBodyState extends State<_CategoryPickerBody> {
                 itemBuilder: (context, i) {
                   final c = widget.categories[i];
                   final selected = c.id == widget.selectedId;
-                  return InkWell(
-                    borderRadius: BorderRadius.circular(12),
-                    onTap: () => Navigator.pop(
-                      context,
-                      CategoryPickResult(
-                        categoryId: c.id,
-                        remember: payee != null && _remember,
+                  return Material(
+                    color: selected ? p.sunken : Colors.transparent,
+                    borderRadius: BorderRadius.circular(16),
+                    clipBehavior: Clip.antiAlias,
+                    child: InkWell(
+                      onTap: () => Navigator.pop(
+                        context,
+                        CategoryPickResult(
+                          categoryId: c.id,
+                          remember: payee != null && _remember,
+                        ),
                       ),
-                    ),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        border: selected
-                            ? Border.all(color: theme.colorScheme.primary, width: 2)
-                            : null,
-                      ),
-                      padding: const EdgeInsets.all(6),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          CircleAvatar(
-                            backgroundColor: c.color.withValues(alpha: 0.14),
-                            foregroundColor: c.color,
-                            child: Icon(c.icon),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            c.name,
-                            maxLines: 2,
-                            textAlign: TextAlign.center,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.bodySmall,
-                          ),
-                        ],
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(4, 10, 4, 6),
+                        child: Column(
+                          children: [
+                            IconTile(icon: c.icon, color: c.color, size: 46),
+                            const SizedBox(height: 8),
+                            Text(
+                              c.name,
+                              maxLines: 2,
+                              textAlign: TextAlign.center,
+                              overflow: TextOverflow.ellipsis,
+                              style: t.labelMedium?.copyWith(
+                                height: 1.25,
+                                color: selected ? p.ink : p.muted,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   );

@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/ui.dart';
 import '../../core/utils/formatters.dart';
 import '../categories/category.dart';
 import 'payment_mode_ui.dart';
 import 'txn.dart';
 
-/// One row in any transaction list.
+/// One row in any transaction list. Sits inside a [Group].
 class TransactionTile extends StatelessWidget {
   const TransactionTile({
     super.key,
@@ -25,65 +26,83 @@ class TransactionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
+    final p = context.palette;
+    final t = Theme.of(context).textTheme;
     final isDebit = txn.type == TxnType.debit;
     final cat = category;
-
-    final title = txn.payeeLabel ??
-        cat?.name ??
-        (isDebit ? 'Payment' : 'Money received');
-
-    final accent = cat?.color ?? scheme.outline;
-    final when = showDate ? formatDateTime(txn.txnTime) : formatTime(txn.txnTime);
     final isFailed = txn.status == TxnStatus.failed;
 
-    return ListTile(
+    final title = txn.payeeLabel ?? cat?.name ?? (isDebit ? 'Payment' : 'Money received');
+    final when = showDate ? formatDateTime(txn.txnTime) : formatTime(txn.txnTime);
+
+    final Widget subtitle;
+    if (isFailed) {
+      subtitle = Text('Failed', style: t.bodySmall?.copyWith(color: Theme.of(context).colorScheme.error));
+    } else if (cat == null) {
+      subtitle = Text(
+        'Choose category',
+        style: t.bodySmall?.copyWith(color: p.attention, fontWeight: FontWeight.w700),
+      );
+    } else if (!txn.isReviewed) {
+      subtitle = Text(
+        'Suggested: ${cat.name}',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: t.bodySmall?.copyWith(color: p.attention),
+      );
+    } else {
+      subtitle = Text(cat.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: t.bodySmall);
+    }
+
+    return InkWell(
       onTap: onTap,
       onLongPress: onLongPress,
-      leading: CircleAvatar(
-        backgroundColor: accent.withValues(alpha: 0.14),
-        foregroundColor: accent,
-        child: Icon(cat?.icon ?? Icons.help_outline),
-      ),
-      title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
-      subtitle: Text.rich(
-        TextSpan(children: [
-          if (cat == null)
-            TextSpan(
-              text: 'Choose category',
-              style: TextStyle(color: scheme.tertiary, fontWeight: FontWeight.w600),
-            )
-          else
-            TextSpan(text: cat.name),
-          if (cat != null && !txn.isReviewed)
-            TextSpan(
-              text: ' (suggested)',
-              style: TextStyle(color: scheme.tertiary),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            IconTile(
+              icon: cat?.icon ?? (isDebit ? Icons.north_east : Icons.south_west),
+              color: cat?.color ?? p.faint,
             ),
-          const TextSpan(text: '\n'),
-          WidgetSpan(
-            alignment: PlaceholderAlignment.middle,
-            child: Padding(
-              padding: const EdgeInsets.only(right: 4),
-              child: Icon(txn.paymentMode.icon, size: 14, color: scheme.onSurfaceVariant),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: t.titleSmall?.copyWith(fontSize: 15),
+                  ),
+                  const SizedBox(height: 3),
+                  subtitle,
+                ],
+              ),
             ),
-          ),
-          TextSpan(text: '${txn.paymentMode.shortLabel}, $when'),
-          if (isFailed)
-            TextSpan(text: ', failed', style: TextStyle(color: scheme.error)),
-        ]),
-        maxLines: 2,
-      ),
-      isThreeLine: true,
-      trailing: Text(
-        '${isDebit ? '−' : '+'}${formatPaise(txn.amountPaise)}',
-        style: theme.textTheme.titleMedium?.copyWith(
-          color: isFailed
-              ? scheme.outline
-              : (isDebit ? AppTheme.expense : AppTheme.income),
-          decoration: isFailed ? TextDecoration.lineThrough : null,
-          fontFeatures: const [FontFeature.tabularFigures()],
+            const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                AmountText(
+                  text: '${isDebit ? '−' : '+'}${formatPaise(txn.amountPaise)}',
+                  isIncome: !isDebit,
+                  struck: isFailed,
+                  style: t.titleSmall?.copyWith(fontSize: 15),
+                ),
+                const SizedBox(height: 3),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(txn.paymentMode.icon, size: 13, color: p.faint),
+                    const SizedBox(width: 4),
+                    Text(when, style: t.bodySmall?.copyWith(fontSize: 12)),
+                  ],
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );

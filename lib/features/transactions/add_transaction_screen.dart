@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/providers.dart';
+import '../../core/theme/app_theme.dart';
+import '../../core/theme/ui.dart';
 import '../../core/utils/formatters.dart';
 import '../categories/category.dart';
 import '../categories/category_picker_sheet.dart';
@@ -196,13 +198,21 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final p = context.palette;
+    final t = Theme.of(context).textTheme;
     final category = ref.watch(categoryMapProvider)[_categoryId];
     final e = widget.existing;
+    final paid = _type == TxnType.debit;
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(_isEdit ? 'Edit transaction' : 'Add transaction'),
+        leading: IconButton(
+          tooltip: 'Close',
+          icon: const Icon(Icons.close),
+          onPressed: () => Navigator.maybePop(context),
+        ),
+        title: Text(_isEdit ? 'Edit transaction' : (paid ? 'New expense' : 'Money received')),
+        titleSpacing: 0,
         actions: [
           if (_isEdit)
             IconButton(
@@ -210,130 +220,233 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
               icon: const Icon(Icons.delete_outline),
               onPressed: _saving ? null : _delete,
             ),
+          const SizedBox(width: 8),
         ],
       ),
       body: Form(
         key: _formKey,
         child: ListView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.only(bottom: 24),
           children: [
-            SegmentedButton<TxnType>(
-              segments: const [
-                ButtonSegment(value: TxnType.debit, label: Text('Paid'), icon: Icon(Icons.north_east)),
-                ButtonSegment(value: TxnType.credit, label: Text('Received'), icon: Icon(Icons.south_west)),
-              ],
-              selected: {_type},
-              onSelectionChanged: (s) => _changeType(s.first),
+            const SizedBox(height: 8),
+            Center(
+              child: _DirectionSwitch(
+                paid: paid,
+                onChanged: (v) => _changeType(v ? TxnType.debit : TxnType.credit),
+              ),
+            ),
+            const SizedBox(height: 28),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: kGutter),
+              child: TextFormField(
+                controller: _amount,
+                autofocus: !_isEdit,
+                textAlign: TextAlign.center,
+                style: t.displayMedium?.copyWith(
+                  color: paid ? p.moneyOut : p.moneyIn,
+                  fontFeatures: kTabular,
+                ),
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))],
+                decoration: InputDecoration(
+                  filled: false,
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  errorBorder: InputBorder.none,
+                  focusedErrorBorder: InputBorder.none,
+                  hintText: '0',
+                  hintStyle: t.displayMedium?.copyWith(color: p.faint),
+                  prefixText: '₹ ',
+                  prefixStyle: t.headlineMedium?.copyWith(color: p.muted),
+                  errorStyle: t.bodySmall?.copyWith(color: Theme.of(context).colorScheme.error),
+                  contentPadding: EdgeInsets.zero,
+                ),
+                validator: (v) =>
+                    parseRupeesToPaise(v ?? '') == null ? 'Enter an amount above ₹0' : null,
+              ),
             ),
             const SizedBox(height: 20),
-            TextFormField(
-              controller: _amount,
-              autofocus: !_isEdit,
-              style: theme.textTheme.headlineMedium,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))],
-              decoration: const InputDecoration(labelText: 'Amount', prefixText: '₹ '),
-              validator: (v) =>
-                  parseRupeesToPaise(v ?? '') == null ? 'Enter an amount above ₹0' : null,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              _type == TxnType.debit ? 'Paid with' : 'Received as',
-              style: theme.textTheme.labelLarge,
-            ),
-            const SizedBox(height: 8),
-            PaymentModeSelector(
-              selected: _mode,
-              onChanged: (m) => setState(() => _mode = m),
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _payee,
-              textCapitalization: TextCapitalization.words,
-              decoration: InputDecoration(
-                labelText: _type == TxnType.debit ? 'Paid to' : 'Received from',
-                hintText: _mode == PaymentMode.cash
-                    ? 'For example: tea shop, auto, vegetables (optional)'
-                    : 'Shop or person name (optional)',
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: kGutter),
+              child: Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final mode in PaymentMode.values)
+                    Pill(
+                      label: mode.shortLabel,
+                      icon: mode.icon,
+                      selected: _mode == mode,
+                      onTap: () => setState(() => _mode = mode),
+                    ),
+                ],
               ),
             ),
-            const SizedBox(height: 16),
-            _FieldTile(
-              label: 'Category',
-              leading: CircleAvatar(
-                backgroundColor: (category?.color ?? theme.colorScheme.outline).withValues(alpha: 0.14),
-                foregroundColor: category?.color ?? theme.colorScheme.outline,
-                child: Icon(category?.icon ?? Icons.category_outlined),
-              ),
-              value: category?.name ?? 'Choose category',
-              onTap: _pickCategory,
+            const SizedBox(height: 28),
+            Group(
+              children: [
+                _Row(
+                  icon: paid ? Icons.storefront_outlined : Icons.person_outline,
+                  child: TextField(
+                    controller: _payee,
+                    textCapitalization: TextCapitalization.words,
+                    style: t.bodyLarge,
+                    decoration: _inline(
+                      paid
+                          ? (_mode == PaymentMode.cash ? 'Paid to (tea shop, auto…)' : 'Paid to')
+                          : 'Received from',
+                      p,
+                      t,
+                    ),
+                  ),
+                ),
+                _Row(
+                  icon: category?.icon ?? Icons.label_outline,
+                  iconColor: category?.color,
+                  onTap: _pickCategory,
+                  child: Text(
+                    category?.name ?? 'Choose category',
+                    style: t.bodyLarge?.copyWith(
+                      color: category == null ? p.attention : p.ink,
+                      fontWeight: category == null ? FontWeight.w700 : null,
+                    ),
+                  ),
+                ),
+                _Row(
+                  icon: Icons.event_outlined,
+                  onTap: _pickDateTime,
+                  child: Text(formatDateTime(_time), style: t.bodyLarge),
+                ),
+                _Row(
+                  icon: Icons.notes_outlined,
+                  child: TextField(
+                    controller: _note,
+                    maxLines: null,
+                    textCapitalization: TextCapitalization.sentences,
+                    style: t.bodyLarge,
+                    decoration: _inline('Note', p, t),
+                  ),
+                ),
+              ],
             ),
             if (_remember && category != null)
               Padding(
-                padding: const EdgeInsets.only(top: 6, left: 4),
+                padding: const EdgeInsets.fromLTRB(kGutter + 4, 10, kGutter, 0),
                 child: Text(
                   'Future payments to this payee will use ${category.name}.',
-                  style: theme.textTheme.bodySmall,
+                  style: t.bodySmall,
                 ),
               ),
-            const SizedBox(height: 16),
-            _FieldTile(
-              label: 'Date and time',
-              leading: const Icon(Icons.event),
-              value: formatDateTime(_time),
-              onTap: _pickDateTime,
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _note,
-              maxLines: 2,
-              textCapitalization: TextCapitalization.sentences,
-              decoration: const InputDecoration(labelText: 'Note (optional)'),
-            ),
             if (e != null && (e.upiRef != null || e.source != TxnSource.manual)) ...[
-              const SizedBox(height: 16),
+              const SectionHeader('Details'),
               _UpiDetails(txn: e),
             ],
-            const SizedBox(height: 24),
-            FilledButton(
-              onPressed: _saving ? null : _save,
-              style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
-              child: Text(_isEdit ? 'Save changes' : 'Save transaction'),
-            ),
           ],
         ),
+      ),
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+            kGutter,
+            8,
+            kGutter,
+            12 + MediaQuery.viewInsetsOf(context).bottom,
+          ),
+          child: FilledButton(
+            onPressed: _saving ? null : _save,
+            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(54)),
+            child: Text(_isEdit ? 'Save changes' : 'Save'),
+          ),
+        ),
+      ),
+    );
+  }
+
+  static InputDecoration _inline(String hint, AppPalette p, TextTheme t) => InputDecoration(
+        hintText: hint,
+        hintStyle: t.bodyLarge?.copyWith(color: p.faint),
+        filled: false,
+        isDense: true,
+        border: InputBorder.none,
+        enabledBorder: InputBorder.none,
+        focusedBorder: InputBorder.none,
+        contentPadding: const EdgeInsets.symmetric(vertical: 4),
+      );
+}
+
+/// Paid / Received switch shown at the top of the screen.
+class _DirectionSwitch extends StatelessWidget {
+  const _DirectionSwitch({required this.paid, required this.onChanged});
+
+  final bool paid;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    Widget option(String label, bool value) {
+      final selected = paid == value;
+      return Semantics(
+        selected: selected,
+        button: true,
+        child: GestureDetector(
+          onTap: () => onChanged(value),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOut,
+            padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 10),
+            decoration: BoxDecoration(
+              color: selected ? p.raised : Colors.transparent,
+              borderRadius: BorderRadius.circular(100),
+            ),
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    color: selected ? p.ink : p.muted,
+                  ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(color: p.sunken, borderRadius: BorderRadius.circular(100)),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [option('Paid', true), option('Received', false)],
       ),
     );
   }
 }
 
-class _FieldTile extends StatelessWidget {
-  const _FieldTile({
-    required this.label,
-    required this.leading,
-    required this.value,
-    required this.onTap,
-  });
+/// One row inside the form group: icon on the left, content on the right.
+class _Row extends StatelessWidget {
+  const _Row({required this.icon, required this.child, this.onTap, this.iconColor});
 
-  final String label;
-  final Widget leading;
-  final String value;
-  final VoidCallback onTap;
+  final IconData icon;
+  final Widget child;
+  final VoidCallback? onTap;
+  final Color? iconColor;
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return ListTile(
-      onTap: onTap,
-      shape: RoundedRectangleBorder(
-        side: BorderSide(color: scheme.outline),
-        borderRadius: BorderRadius.circular(4),
+    final p = context.palette;
+    final row = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        children: [
+          IconTile(icon: icon, color: iconColor ?? p.muted, size: 36),
+          const SizedBox(width: 14),
+          Expanded(child: child),
+          if (onTap != null) Icon(Icons.chevron_right, color: p.faint),
+        ],
       ),
-      leading: leading,
-      title: Text(label, style: Theme.of(context).textTheme.bodySmall),
-      subtitle: Text(value, style: Theme.of(context).textTheme.bodyLarge),
-      trailing: const Icon(Icons.chevron_right),
     );
+    return onTap == null ? row : InkWell(onTap: onTap, child: row);
   }
 }
 
@@ -344,6 +457,7 @@ class _UpiDetails extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = Theme.of(context).textTheme;
     final rows = <(String, String)>[
       if (txn.payeeVpa != null) ('UPI ID', txn.payeeVpa!),
       if (txn.upiRef != null) ('UPI reference', txn.upiRef!),
@@ -357,24 +471,27 @@ class _UpiDetails extends StatelessWidget {
         TxnSource.statement => 'Bank statement',
       }),
     ];
-    return Card.outlined(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          children: [
-            for (final (label, value) in rows)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Row(
-                  children: [
-                    Expanded(child: Text(label, style: Theme.of(context).textTheme.bodySmall)),
-                    Flexible(child: SelectableText(value, textAlign: TextAlign.end)),
-                  ],
+    return Group(
+      dividerIndent: 16,
+      children: [
+        for (final (label, value) in rows)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            child: Row(
+              children: [
+                Expanded(child: Text(label, style: t.bodySmall)),
+                const SizedBox(width: 12),
+                Flexible(
+                  child: SelectableText(
+                    value,
+                    textAlign: TextAlign.end,
+                    style: t.bodyMedium?.copyWith(fontFeatures: kTabular),
+                  ),
                 ),
-              ),
-          ],
-        ),
-      ),
+              ],
+            ),
+          ),
+      ],
     );
   }
 }

@@ -1,25 +1,32 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/ui.dart';
 import '../../core/utils/formatters.dart';
 import '../categories/category.dart';
 import '../detection/detection_screen.dart';
 import '../transactions/add_transaction_screen.dart';
 import '../transactions/categorize_action.dart';
+import '../transactions/payment_mode_ui.dart';
 import '../transactions/to_categorize_screen.dart';
 import '../transactions/transaction_tile.dart';
-import '../transactions/payment_mode_ui.dart';
 import '../transactions/txn.dart';
 
 class HomeScreen extends ConsumerWidget {
-  const HomeScreen({super.key});
+  const HomeScreen({super.key, this.onSeeAll});
+
+  /// Opens the Transactions tab.
+  final VoidCallback? onSeeAll;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final summary = ref.watch(monthSummaryProvider);
-    final pending = ref.watch(toCategorizeProvider);
+    final daily = ref.watch(dailySpendProvider).valueOrNull;
+    final pending = ref.watch(toCategorizeProvider).valueOrNull ?? const <Txn>[];
     final recent = ref.watch(recentTxnsProvider);
     final categories = ref.watch(categoryMapProvider);
     final detection = ref.watch(detectionStatusProvider).valueOrNull;
@@ -28,367 +35,514 @@ class HomeScreen extends ConsumerWidget {
         !detection.accessEnabled &&
         !detection.smsPermission &&
         !detection.promoDismissed;
+    final s = summary.valueOrNull;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Expense Tracker')),
-      body: RefreshIndicator(
-        onRefresh: () async => refreshAll(ref),
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 96),
-          children: [
-            summary.when(
-              data: (s) => _MonthCard(summary: s),
-              loading: () => const SizedBox(height: 132),
-              error: (e, _) => Text('Could not load this month: $e'),
-            ),
-            if (showDetectionPromo) ...[
-              const SizedBox(height: 12),
-              const _DetectionPromoCard(),
-            ],
-            if ((pending.valueOrNull ?? const <Txn>[]).isNotEmpty) ...[
-              const SizedBox(height: 12),
-              _ToCategorizeCard(count: pending.valueOrNull!.length),
-            ],
-            if ((summary.valueOrNull?.byCategory ?? const []).isNotEmpty) ...[
-              const SizedBox(height: 24),
-              Text('Where it went', style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 8),
-              _CategoryBreakdown(summary: summary.valueOrNull!, categories: categories),
-            ],
-            const SizedBox(height: 24),
-            Text('Recent', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 4),
-            recent.when(
-              loading: () => const Padding(
-                padding: EdgeInsets.all(24),
-                child: Center(child: CircularProgressIndicator()),
-              ),
-              error: (e, _) => Text('Could not load transactions: $e'),
-              data: (list) => list.isEmpty
-                  ? const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 24),
-                      child: Text('No transactions yet. Tap Add expense to record a cash or UPI payment.'),
-                    )
-                  : Column(
-                      children: [
-                        for (final t in list)
-                          TransactionTile(
-                            txn: t,
-                            category: categories[t.categoryId],
-                            showDate: true,
-                            onTap: () => openTransactionEditor(context, existing: t),
-                            onLongPress: () => categorizeTransaction(context, ref, t),
-                          ),
-                      ],
-                    ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _MonthCard extends StatelessWidget {
-  const _MonthCard({required this.summary});
-
-  final MonthSummary summary;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final onCard = scheme.onPrimaryContainer;
-    final net = summary.incomePaise - summary.spentPaise;
-
-    return Card.filled(
-      color: scheme.primaryContainer,
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              formatMonth(summary.month),
-              style: theme.textTheme.titleSmall?.copyWith(color: onCard),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: _Flow(
-                    label: 'Money out',
-                    hint: 'Debited and spent',
-                    icon: Icons.north_east,
-                    amount: summary.spentPaise,
-                    color: onCard,
-                  ),
+      body: SafeArea(
+        bottom: false,
+        child: RefreshIndicator(
+          color: context.palette.ink,
+          onRefresh: () async => refreshAll(ref),
+          child: ListView(
+            padding: const EdgeInsets.only(bottom: 120),
+            children: [
+              if (summary.hasError)
+                Padding(
+                  padding: const EdgeInsets.all(kGutter),
+                  child: Text('Could not load this month: ${summary.error}'),
                 ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: _Flow(
-                    label: 'Money in',
-                    hint: 'Credited and received',
-                    icon: Icons.south_west,
-                    amount: summary.incomePaise,
-                    color: onCard,
-                  ),
+              _Hero(summary: s),
+              if (daily != null && daily.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(kGutter, 28, kGutter, 0),
+                  child: DailyBars(totals: daily, today: DateTime.now().day),
                 ),
+              if (pending.isNotEmpty) ...[
+                const SizedBox(height: 24),
+                _AttentionRow(count: pending.length),
               ],
-            ),
-            const SizedBox(height: 12),
-            Text(
-              net >= 0
-                  ? 'You kept ${formatPaise(net)} this month'
-                  : 'You spent ${formatPaise(-net)} more than you received',
-              style: theme.textTheme.bodyMedium?.copyWith(color: onCard),
-            ),
-            if (summary.spentByMode.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              Wrap(
-                spacing: 16,
-                runSpacing: 8,
-                children: [
-                  for (final mode in PaymentMode.values)
-                    if (summary.spentByMode[mode] != null)
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
+              if (showDetectionPromo) ...[
+                const SizedBox(height: 12),
+                const _DetectionPromo(),
+              ],
+              if (s != null && s.byCategory.isNotEmpty) ...[
+                const SectionHeader('Where it went'),
+                _Breakdown(summary: s, categories: categories),
+              ],
+              SectionHeader(
+                'Recent',
+                action: onSeeAll == null
+                    ? null
+                    : TextButton(onPressed: onSeeAll, child: const Text('See all')),
+              ),
+              recent.when(
+                loading: () => const SizedBox(height: 120),
+                error: (e, _) => Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: kGutter),
+                  child: Text('Could not load transactions: $e'),
+                ),
+                data: (list) => list.isEmpty
+                    ? const _FirstRun()
+                    : Group(
                         children: [
-                          Icon(mode.icon, size: 18, color: onCard),
-                          const SizedBox(width: 6),
-                          Text(
-                            '${mode.shortLabel} ${formatPaise(summary.spentByMode[mode]!)}',
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: onCard,
-                              fontWeight: FontWeight.w600,
+                          for (final t in list)
+                            TransactionTile(
+                              txn: t,
+                              category: categories[t.categoryId],
+                              showDate: true,
+                              onTap: () => openTransactionEditor(context, existing: t),
+                              onLongPress: () => categorizeTransaction(context, ref, t),
                             ),
-                          ),
                         ],
                       ),
-                ],
               ),
             ],
-          ],
+          ),
         ),
       ),
     );
   }
 }
 
-/// One side of the month card: money out or money in.
-class _Flow extends StatelessWidget {
-  const _Flow({
-    required this.label,
-    required this.hint,
-    required this.icon,
-    required this.amount,
-    required this.color,
-  });
+/// Month name, the amount spent, and money in / kept.
+class _Hero extends StatelessWidget {
+  const _Hero({required this.summary});
 
-  final String label;
-  final String hint;
-  final IconData icon;
-  final int amount;
-  final Color color;
+  final MonthSummary? summary;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Semantics(
-      label: '$label ${formatPaise(amount)}',
-      excludeSemantics: true,
+    final p = context.palette;
+    final t = Theme.of(context).textTheme;
+    final s = summary;
+    final month = s?.month ?? DateTime.now();
+    final spent = s?.spentPaise ?? 0;
+    final income = s?.incomePaise ?? 0;
+    final kept = income - spent;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(kGutter, 20, kGutter, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(icon, size: 16, color: color),
-              const SizedBox(width: 4),
-              Text(label, style: theme.textTheme.bodyMedium?.copyWith(color: color)),
-            ],
-          ),
+          Text(formatMonth(month), style: t.titleSmall?.copyWith(color: p.muted)),
+          const SizedBox(height: 18),
+          Text('Spent', style: t.bodyMedium?.copyWith(color: p.muted)),
           const SizedBox(height: 4),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
-            child: Text(
-              formatPaise(amount),
-              style: theme.textTheme.headlineMedium?.copyWith(
-                color: color,
-                fontWeight: FontWeight.w600,
+          Semantics(
+            label: 'Spent ${formatPaise(spent)} this month',
+            excludeSemantics: true,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                s == null ? ' ' : formatPaise(spent),
+                style: t.displayLarge?.copyWith(fontFeatures: kTabular),
               ),
             ),
           ),
-          Text(hint, style: theme.textTheme.bodySmall?.copyWith(color: color)),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 24,
+            runSpacing: 8,
+            children: [
+              _Stat(
+                label: 'Received',
+                value: formatPaise(income),
+                color: p.moneyIn,
+              ),
+              _Stat(
+                label: kept >= 0 ? 'Kept' : 'Over by',
+                value: formatPaise(kept.abs()),
+                color: kept >= 0 ? p.ink : p.attention,
+              ),
+            ],
+          ),
+          if (s != null && s.spentByMode.length > 1) ...[
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 16,
+              runSpacing: 6,
+              children: [
+                for (final mode in PaymentMode.values)
+                  if (s.spentByMode[mode] != null)
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(mode.icon, size: 16, color: p.muted),
+                        const SizedBox(width: 6),
+                        Text(
+                          '${mode.shortLabel} ${formatPaise(s.spentByMode[mode]!)}',
+                          style: t.bodySmall?.copyWith(fontFeatures: kTabular),
+                        ),
+                      ],
+                    ),
+              ],
+            ),
+          ],
         ],
       ),
     );
   }
 }
 
-class _DetectionPromoCard extends ConsumerWidget {
-  const _DetectionPromoCard();
+class _Stat extends StatelessWidget {
+  const _Stat({required this.label, required this.value, required this.color});
+
+  final String label;
+  final String value;
+  final Color color;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    return Card.outlined(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 16, 8, 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.bolt, color: theme.colorScheme.primary),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text('Record payments automatically',
-                      style: theme.textTheme.titleSmall),
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Money credited and debited in your bank SMS, Google Pay and PhonePe is '
-              'added for you. You just pick the category.',
-              style: theme.textTheme.bodyMedium,
-            ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton(
-                  onPressed: () async {
-                    await ref.read(detectionServiceProvider).setPromoDismissed(true);
-                    ref.invalidate(detectionStatusProvider);
-                  },
-                  child: const Text('Not now'),
-                ),
-                FilledButton(
-                  onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const DetectionScreen()),
-                  ),
-                  child: const Text('Set up'),
-                ),
-              ],
-            ),
-          ],
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).textTheme;
+    return Text.rich(
+      TextSpan(children: [
+        TextSpan(text: '$label  ', style: t.bodyMedium?.copyWith(color: context.palette.muted)),
+        TextSpan(
+          text: value,
+          style: t.titleMedium?.copyWith(color: color, fontFeatures: kTabular),
         ),
+      ]),
+    );
+  }
+}
+
+/// One thin bar per day of the month. Today is marigold; days still to come
+/// are a faint baseline so the month's shape is visible.
+class DailyBars extends StatelessWidget {
+  const DailyBars({super.key, required this.totals, required this.today, this.height = 72});
+
+  final List<int> totals;
+
+  /// Day of month (1-based) to highlight.
+  final int today;
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    final t = Theme.of(context).textTheme;
+    final maxValue = totals.fold<int>(0, math.max);
+    final todayIndex = (today - 1).clamp(0, totals.length - 1);
+    final todayAmount = totals[todayIndex];
+
+    return Semantics(
+      label: 'Daily spending this month. Today ${formatPaise(todayAmount)}.',
+      excludeSemantics: true,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(child: Text('Each day', style: t.bodySmall)),
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(color: p.accent, shape: BoxShape.circle),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                'Today ${formatPaise(todayAmount)}',
+                style: t.labelMedium?.copyWith(fontFeatures: kTabular),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: height,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                for (var i = 0; i < totals.length; i++)
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 1.5),
+                      child: _Bar(
+                        fraction: maxValue == 0 ? 0 : totals[i] / maxValue,
+                        color: i == todayIndex
+                            ? p.accent
+                            : i > todayIndex
+                                ? p.line
+                                : p.bar,
+                        height: height,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Text('1', style: t.labelSmall?.copyWith(color: p.faint)),
+              const Spacer(),
+              Text('${totals.length}', style: t.labelSmall?.copyWith(color: p.faint)),
+            ],
+          ),
+        ],
       ),
     );
   }
 }
 
-class _ToCategorizeCard extends StatelessWidget {
-  const _ToCategorizeCard({required this.count});
+class _Bar extends StatelessWidget {
+  const _Bar({required this.fraction, required this.color, required this.height});
+
+  final double fraction;
+  final Color color;
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    // Zero days still show a short stub so the row reads as a calendar.
+    final h = math.max(3.0, height * fraction.clamp(0.0, 1.0));
+    return Container(
+      height: h,
+      decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(3)),
+    );
+  }
+}
+
+/// "5 payments need a category" — the one thing on Home that asks for action.
+class _AttentionRow extends StatelessWidget {
+  const _AttentionRow({required this.count});
 
   final int count;
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Card.filled(
-      color: scheme.tertiaryContainer,
-      child: ListTile(
-        leading: Icon(Icons.label_outline, color: scheme.onTertiaryContainer),
-        title: Text(
-          count == 1 ? '1 payment to categorize' : '$count payments to categorize',
-          style: TextStyle(color: scheme.onTertiaryContainer, fontWeight: FontWeight.w600),
+    final p = context.palette;
+    final t = Theme.of(context).textTheme;
+    return Group(
+      children: [
+        ListTile(
+          minVerticalPadding: 14,
+          leading: Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: p.accent,
+              borderRadius: BorderRadius.circular(AppTheme.tileRadius),
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              count > 99 ? '99+' : '$count',
+              style: t.labelLarge?.copyWith(color: p.onAccent, fontWeight: FontWeight.w800),
+            ),
+          ),
+          title: Text(count == 1 ? 'Payment needs a category' : 'Payments need a category'),
+          subtitle: const Text('Pick one so your totals stay accurate'),
+          trailing: Icon(Icons.chevron_right, color: p.muted),
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const ToCategorizeScreen()),
+          ),
         ),
-        subtitle: Text(
-          'Pick a category so your totals stay accurate',
-          style: TextStyle(color: scheme.onTertiaryContainer),
-        ),
-        trailing: Icon(Icons.chevron_right, color: scheme.onTertiaryContainer),
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const ToCategorizeScreen()),
-        ),
-      ),
+      ],
     );
   }
 }
 
-class _CategoryBreakdown extends StatelessWidget {
-  const _CategoryBreakdown({required this.summary, required this.categories});
+/// Spending split by category: one stacked bar, then the top categories.
+class _Breakdown extends StatelessWidget {
+  const _Breakdown({required this.summary, required this.categories});
 
   final MonthSummary summary;
   final Map<String, TxnCategory> categories;
 
+  static const _shown = 5;
+
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final top = summary.byCategory.take(6).toList();
+    final p = context.palette;
+    final t = Theme.of(context).textTheme;
+    final total = summary.spentPaise;
+    final items = summary.byCategory.where((c) => c.totalPaise > 0).toList();
+    final top = items.take(_shown).toList();
+    final rest = items.skip(_shown).fold<int>(0, (sum, c) => sum + c.totalPaise);
 
-    return Column(
-      children: [
-        for (final item in top)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 6),
-            child: _BreakdownRow(
-              category: categories[item.categoryId],
-              totalPaise: item.totalPaise,
-              share: summary.spentPaise == 0 ? 0 : item.totalPaise / summary.spentPaise,
-              theme: theme,
+    Color colorOf(String? id) => categories[id]?.color ?? p.faint;
+    String nameOf(String? id) =>
+        id == null ? 'Not categorized' : (categories[id]?.name ?? 'Other');
+
+    final segments = <(Color, int)>[
+      for (final c in top) (colorOf(c.categoryId), c.totalPaise),
+      if (rest > 0) (p.bar, rest),
+    ];
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: kGutter),
+      child: Column(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: SizedBox(
+              height: 12,
+              child: Row(
+                children: [
+                  for (var i = 0; i < segments.length; i++) ...[
+                    if (i > 0) const SizedBox(width: 2),
+                    Expanded(
+                      flex: math.max(1, (segments[i].$2 * 1000 / math.max(1, total)).round()),
+                      child: ColoredBox(color: segments[i].$1),
+                    ),
+                  ],
+                ],
+              ),
             ),
           ),
-      ],
+          const SizedBox(height: 16),
+          for (final c in top)
+            _BreakdownRow(
+              color: colorOf(c.categoryId),
+              name: nameOf(c.categoryId),
+              amount: c.totalPaise,
+              share: total == 0 ? 0 : c.totalPaise / total,
+            ),
+          if (rest > 0)
+            _BreakdownRow(
+              color: p.bar,
+              name: 'Everything else',
+              amount: rest,
+              share: total == 0 ? 0 : rest / total,
+            ),
+          if (items.isEmpty) Text('No spending yet', style: t.bodySmall),
+        ],
+      ),
     );
   }
 }
 
 class _BreakdownRow extends StatelessWidget {
   const _BreakdownRow({
-    required this.category,
-    required this.totalPaise,
+    required this.color,
+    required this.name,
+    required this.amount,
     required this.share,
-    required this.theme,
   });
 
-  final TxnCategory? category;
-  final int totalPaise;
+  final Color color;
+  final String name;
+  final int amount;
   final double share;
-  final ThemeData theme;
 
   @override
   Widget build(BuildContext context) {
-    final color = category?.color ?? theme.colorScheme.outline;
-    return Row(
+    final p = context.palette;
+    final t = Theme.of(context).textTheme;
+    final pct = (share * 100).round();
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 7),
+      child: Row(
+        children: [
+          Container(
+            width: 10,
+            height: 10,
+            decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(3)),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(name, style: t.bodyMedium, maxLines: 1, overflow: TextOverflow.ellipsis),
+          ),
+          SizedBox(
+            width: 44,
+            child: Text(
+              pct < 1 ? '<1%' : '$pct%',
+              textAlign: TextAlign.right,
+              style: t.bodySmall?.copyWith(fontFeatures: kTabular),
+            ),
+          ),
+          const SizedBox(width: 12),
+          ConstrainedBox(
+            constraints: const BoxConstraints(minWidth: 84),
+            child: Text(
+              formatPaise(amount),
+              textAlign: TextAlign.right,
+              style: t.titleSmall?.copyWith(color: p.ink, fontFeatures: kTabular),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DetectionPromo extends ConsumerWidget {
+  const _DetectionPromo();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final p = context.palette;
+    final t = Theme.of(context).textTheme;
+    return Group(
       children: [
-        Icon(category?.icon ?? Icons.help_outline, color: color, size: 20),
-        const SizedBox(width: 12),
-        Expanded(
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 12, 8),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  IconTile(icon: Icons.sms_outlined, color: p.moneyIn),
+                  const SizedBox(width: 14),
                   Expanded(
-                    child: Text(
-                      category?.name ?? 'Not categorized',
-                      overflow: TextOverflow.ellipsis,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Record payments automatically', style: t.titleMedium),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Credits and debits from your bank SMS, Google Pay and PhonePe '
+                          'are added for you. You only pick the category.',
+                          style: t.bodySmall,
+                        ),
+                      ],
                     ),
-                  ),
-                  Text(
-                    formatPaise(totalPaise),
-                    style: const TextStyle(color: AppTheme.expense),
                   ),
                 ],
               ),
-              const SizedBox(height: 4),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(4),
-                child: LinearProgressIndicator(
-                  value: share.clamp(0, 1).toDouble(),
-                  minHeight: 6,
-                  color: color,
-                  backgroundColor: color.withValues(alpha: 0.12),
-                ),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () async {
+                      await ref.read(detectionServiceProvider).setPromoDismissed(true);
+                      ref.invalidate(detectionStatusProvider);
+                    },
+                    child: Text('Not now', style: TextStyle(color: p.muted)),
+                  ),
+                  const SizedBox(width: 4),
+                  FilledButton(
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const DetectionScreen()),
+                    ),
+                    child: const Text('Set up'),
+                  ),
+                ],
               ),
             ],
           ),
         ),
       ],
+    );
+  }
+}
+
+class _FirstRun extends StatelessWidget {
+  const _FirstRun();
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).textTheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(kGutter, 4, kGutter, 0),
+      child: Text(
+        'Nothing yet. Tap + to add a cash or UPI payment, or set up automatic '
+        'recording in Settings.',
+        style: t.bodyMedium?.copyWith(color: context.palette.muted),
+      ),
     );
   }
 }
