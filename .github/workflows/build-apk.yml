@@ -97,7 +97,7 @@ jobs:
           exit $code
 
       - name: Publish screenshots (ui-preview release)
-        if: github.ref == 'refs/heads/main' && steps.screens.outcome == 'success'
+        if: always() && github.ref == 'refs/heads/main' && hashFiles('app/test_screens/out/*.png') != ''
         continue-on-error: true
         uses: softprops/action-gh-release@v2
         with:
@@ -106,6 +106,7 @@ jobs:
           prerelease: true
           make_latest: false
           files: app/test_screens/out/*.png
+          fail_on_unmatched_files: false
 
       - uses: actions/upload-artifact@v4
         with:

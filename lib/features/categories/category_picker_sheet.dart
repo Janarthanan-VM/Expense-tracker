@@ -113,7 +113,8 @@ class _CategoryPickerBodyState extends State<_CategoryPickerBody> {
                 padding: const EdgeInsets.fromLTRB(12, 8, 12, 20),
                 gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
                   maxCrossAxisExtent: 96,
-                  mainAxisExtent: 98,
+                  // Room for the icon plus two lines of name at large font sizes.
+                  mainAxisExtent: 112,
                   mainAxisSpacing: 4,
                   crossAxisSpacing: 4,
                 ),
