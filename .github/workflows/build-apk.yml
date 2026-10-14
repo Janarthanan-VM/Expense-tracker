@@ -88,8 +88,13 @@ jobs:
           cp ../screens/*.dart test_screens/
           flutter_root="$(dirname "$(dirname "$(command -v flutter)")")"
           cp "$flutter_root/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf" test_screens/
-          flutter test test_screens --update-goldens
-          ls -la test_screens/out
+          set +e
+          flutter test test_screens --update-goldens --reporter json > ../screens.json
+          code=$?
+          set -e
+          python3 ../tool/report_flutter_failures.py ../screens.json Screenshots
+          ls -la test_screens/out || true
+          exit $code
 
       - name: Publish screenshots (ui-preview release)
         if: github.ref == 'refs/heads/main' && steps.screens.outcome == 'success'
