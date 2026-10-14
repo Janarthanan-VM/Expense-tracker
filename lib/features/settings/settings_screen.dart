@@ -74,8 +74,8 @@ class SettingsScreen extends ConsumerWidget {
               _SettingRow(
                 icon: Icons.info_outline,
                 color: p.muted,
-                title: 'Version',
-                subtitle: '0.5.0',
+                title: 'Dripless',
+                subtitle: 'Version 0.5.1',
               ),
             ],
           ),

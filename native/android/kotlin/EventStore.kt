@@ -89,25 +89,44 @@ class EventStore(context: Context) {
 
     /**
      * The same payment usually shows up twice: in the UPI app and as a bank
-     * SMS. If a payment with the same amount and direction was seen in the
-     * last few minutes, returns its id so the two are merged.
+     * SMS (or as the SMS and the messages app's notification). Returns the id
+     * of the earlier copy so the two are merged.
+     *
+     * Same UPI reference always matches. Without one, it must be the same
+     * amount and direction within a few minutes AND come from a different
+     * [channel]: two SMS for ₹10 a minute apart are two real payments.
      */
     @Synchronized
-    fun matchRecent(amountPaise: Long, isDebit: Boolean, upiRef: String?, now: Long): String? {
+    fun matchRecent(
+        amountPaise: Long,
+        isDebit: Boolean,
+        upiRef: String?,
+        now: Long,
+        channel: String,
+    ): String? {
         val recent = pruneRecent(now)
         for (i in 0 until recent.length()) {
             val r = recent.getJSONObject(i)
-            val sameRef = upiRef != null && r.optString("upiRef") == upiRef
+            val otherRef = r.optString("upiRef").takeIf { it.isNotEmpty() && it != "null" }
+            if (upiRef != null && otherRef == upiRef) return r.getString("id")
+            if (upiRef != null && otherRef != null) continue
             val sameAmount = r.optLong("amountPaise") == amountPaise &&
                 r.optBoolean("isDebit") == isDebit &&
                 Math.abs(now - r.optLong("at")) <= MERGE_WINDOW_MS
-            if (sameRef || sameAmount) return r.getString("id")
+            if (sameAmount && r.optString("channel") != channel) return r.getString("id")
         }
         return null
     }
 
     @Synchronized
-    fun addRecent(id: String, amountPaise: Long, isDebit: Boolean, upiRef: String?, now: Long) {
+    fun addRecent(
+        id: String,
+        amountPaise: Long,
+        isDebit: Boolean,
+        upiRef: String?,
+        now: Long,
+        channel: String,
+    ) {
         val recent = pruneRecent(now)
         recent.put(
             JSONObject()
@@ -115,10 +134,43 @@ class EventStore(context: Context) {
                 .put("amountPaise", amountPaise)
                 .put("isDebit", isDebit)
                 .put("upiRef", upiRef ?: JSONObject.NULL)
+                .put("channel", channel)
                 .put("at", now),
         )
         prefs.edit().putString(KEY_RECENT, recent.toString()).apply()
     }
+
+    // ------------------------------------------------------------ check log
+
+    /**
+     * Remembers what happened to the last few messages (no message text), so
+     * the setup screen can show whether SMS are arriving and why one was
+     * skipped.
+     */
+    @Synchronized
+    fun recordCheck(
+        channel: String,
+        source: String,
+        outcome: String,
+        time: Long,
+        amountPaise: Long? = null,
+        isDebit: Boolean? = null,
+    ) {
+        val log = readArray(KEY_LOG)
+        val entry = JSONObject()
+            .put("channel", channel)
+            .put("source", source)
+            .put("outcome", outcome)
+            .put("time", time)
+        amountPaise?.let { entry.put("amountPaise", it) }
+        isDebit?.let { entry.put("isDebit", it) }
+        val kept = JSONArray().put(entry)
+        for (i in 0 until minOf(log.length(), LOG_SIZE - 1)) kept.put(log.get(i))
+        prefs.edit().putString(KEY_LOG, kept.toString()).apply()
+    }
+
+    /** Newest first. */
+    fun checkLog(): String = prefs.getString(KEY_LOG, "[]") ?: "[]"
 
     private fun pruneRecent(now: Long): JSONArray {
         val recent = readArray(KEY_RECENT)
@@ -179,6 +231,8 @@ class EventStore(context: Context) {
         private const val KEY_SEEN = "seen"
         private const val KEY_RECENT = "recent"
         private const val KEY_HINTS = "hints"
+        private const val KEY_LOG = "check_log"
+        private const val LOG_SIZE = 8
         private const val DAY_MS = 24L * 60 * 60 * 1000
         private const val MERGE_WINDOW_MS = 5L * 60 * 1000
         private const val RECENT_KEEP_MS = 30L * 60 * 1000

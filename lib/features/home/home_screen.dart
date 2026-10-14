@@ -152,7 +152,7 @@ class _Hero extends StatelessWidget {
                 color: p.moneyIn,
               ),
               _Stat(
-                label: kept >= 0 ? 'Kept' : 'Over by',
+                label: kept >= 0 ? 'Saved' : 'Overspent',
                 value: formatPaise(kept.abs()),
                 color: kept >= 0 ? p.ink : p.attention,
               ),

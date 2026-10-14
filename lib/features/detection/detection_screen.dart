@@ -249,6 +249,18 @@ class _DetectionScreenState extends ConsumerState<DetectionScreen> with WidgetsB
           subtitle: const Text('Turn off to pause recording without removing permissions.'),
         ),
         const Divider(height: 32),
+        Row(
+          children: [
+            Expanded(child: Text('Recent message checks', style: theme.textTheme.titleMedium)),
+            TextButton(
+              onPressed: () => ref.invalidate(detectionStatusProvider),
+              child: const Text('Refresh'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        _CheckLog(checks: s.checks, smsAllowed: s.smsPermission),
+        const Divider(height: 32),
         Text('Import past bank SMS', style: theme.textTheme.titleMedium),
         const SizedBox(height: 4),
         Text(
@@ -317,6 +329,13 @@ class _DetectionScreenState extends ConsumerState<DetectionScreen> with WidgetsB
         const _InfoRow(
           icon: Icons.merge_type,
           text: 'If the same payment shows up in an SMS and in a UPI app, it is saved once.',
+        ),
+        _InfoRow(
+          icon: Icons.battery_saver_outlined,
+          text: 'Battery tip: some phones stop apps in the background, so SMS are missed. On '
+              'Samsung open Settings > Battery > Background usage limits > Never sleeping '
+              'apps and add Dripless. On any phone, App info > Battery > Unrestricted helps.',
+          action: TextButton(onPressed: _service.openAppInfo, child: const Text('Open App info')),
         ),
         const _InfoRow(
           icon: Icons.lock_outline,
@@ -428,10 +447,11 @@ class _StepTile extends StatelessWidget {
 }
 
 class _InfoRow extends StatelessWidget {
-  const _InfoRow({required this.icon, required this.text});
+  const _InfoRow({required this.icon, required this.text, this.action});
 
   final IconData icon;
   final String text;
+  final Widget? action;
 
   @override
   Widget build(BuildContext context) {
@@ -442,9 +462,100 @@ class _InfoRow extends StatelessWidget {
         children: [
           Icon(icon, size: 20, color: Theme.of(context).colorScheme.onSurfaceVariant),
           const SizedBox(width: 12),
-          Expanded(child: Text(text)),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(text),
+                if (action != null) action!,
+              ],
+            ),
+          ),
         ],
       ),
+    );
+  }
+}
+
+/// What the app did with the last few messages, so it is clear whether SMS
+/// are arriving at all and why one was skipped.
+class _CheckLog extends StatelessWidget {
+  const _CheckLog({required this.checks, required this.smsAllowed});
+
+  final List<MessageCheck> checks;
+  final bool smsAllowed;
+
+  static String _outcome(MessageCheck c) {
+    final amount = c.amountPaise == null ? '' : ' ${formatPaise(c.amountPaise!)}';
+    final dir = c.isDebit == null ? '' : (c.isDebit! ? ' paid' : ' received');
+    return switch (c.outcome) {
+      'recorded' => 'Recorded$amount$dir',
+      'merged' => 'Same payment as one already recorded$amount',
+      'not_payment' => 'Not a completed payment, skipped',
+      'not_bank' => 'From a personal number, not read',
+      'paused' => 'Recording is paused',
+      _ => c.outcome,
+    };
+  }
+
+  static String _channel(String channel) => switch (channel) {
+        'sms' => 'SMS',
+        'sms_notification' => 'SMS notification',
+        'app_notification' => 'App notification',
+        _ => channel,
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).textTheme;
+    final scheme = Theme.of(context).colorScheme;
+    if (checks.isEmpty) {
+      return Text(
+        smsAllowed
+            ? 'No messages checked since the app was installed. When a bank SMS arrives it '
+                'shows up here within a second. If a bank SMS arrives and nothing appears, '
+                'your phone is stopping the app in the background: see the battery tip below.'
+            : 'Nothing yet. Allow "Read bank SMS" above first.',
+        style: t.bodySmall,
+      );
+    }
+    return Column(
+      children: [
+        for (final c in checks)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Icon(
+                    c.outcome == 'recorded' || c.outcome == 'merged'
+                        ? Icons.check_circle_outline
+                        : Icons.remove_circle_outline,
+                    size: 18,
+                    color: c.outcome == 'recorded' || c.outcome == 'merged'
+                        ? scheme.primary
+                        : scheme.outline,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(_outcome(c), style: t.bodyMedium),
+                      Text(
+                        '${c.source}, ${_channel(c.channel)}, ${formatDateTime(c.time)}',
+                        style: t.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
     );
   }
 }

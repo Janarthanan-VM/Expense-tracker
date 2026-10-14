@@ -65,6 +65,7 @@ class MainActivity : FlutterActivity() {
                         "canNotify" to canPostNotifications(),
                         "promoDismissed" to store.isPromoDismissed(),
                         "smsPermission" to hasSmsPermission(),
+                        "checkLog" to store.checkLog(),
                         "sdk" to Build.VERSION.SDK_INT,
                     ),
                 )

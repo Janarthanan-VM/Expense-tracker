@@ -22,16 +22,27 @@ class SmsReceiver : BroadcastReceiver() {
             parts.filterNotNull()
                 .groupBy { it.originatingAddress.orEmpty() }
                 .forEach { (sender, messages) ->
-                    val bank = PaymentSources.bankSenderLabel(sender) ?: return@forEach
-                    val body = messages.joinToString("") { it.messageBody.orEmpty() }
-                    if (body.isBlank()) return@forEach
                     val sentAt = messages.first().timestampMillis
                     val time = if (sentAt > 0) sentAt else System.currentTimeMillis()
+                    val bank = PaymentSources.bankSenderLabel(sender)
+                    if (bank == null) {
+                        // A personal number: never read. Logged without the number.
+                        EventStore(context).recordCheck(
+                            PaymentIntake.CHANNEL_SMS,
+                            "Phone number",
+                            Outcome.NOT_BANK.key,
+                            time,
+                        )
+                        return@forEach
+                    }
+                    val body = messages.joinToString("") { it.messageBody.orEmpty() }
+                    if (body.isBlank()) return@forEach
                     PaymentIntake.handle(
                         context = context,
                         text = body,
                         strict = true,
                         kind = "sms",
+                        channel = PaymentIntake.CHANNEL_SMS,
                         label = bank,
                         time = time,
                         seenKey = PaymentIntake.SMS_SEEN_KEY,

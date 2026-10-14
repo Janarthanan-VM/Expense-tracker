@@ -236,20 +236,33 @@ class TransactionRepository {
     return saved != null;
   }
 
+  /// The same payment seen from another place (an SMS and a UPI app
+  /// notification, or one you typed in yourself) within a few minutes.
+  ///
+  /// Live payments only match a copy from a *different* source, and never one
+  /// with a different UPI reference, so two real ₹10 payments a minute apart
+  /// stay two payments. Imports ([includeDeleted]) also match the same source,
+  /// because an imported SMS may already be saved under another id.
   Future<Txn?> _findNearDuplicate(DetectedPayment e, {bool includeDeleted = false}) async {
     final time = (e.time ?? DateTime.now()).millisecondsSinceEpoch;
     const window = 5 * 60 * 1000;
+    final source = e.source == 'sms' ? TxnSource.sms.name : TxnSource.notification.name;
     final rows = await _db.query(
       'transactions',
       where: '${includeDeleted ? '1 = 1' : _notDeleted} AND amount_paise = ? AND type = ? '
           'AND txn_time BETWEEN ? AND ? '
-          "AND (source != 'manual' OR payment_mode = ?)",
+          "AND (source != 'manual' OR payment_mode = ?) "
+          'AND (upi_ref IS NULL OR ? IS NULL OR upi_ref = ?)'
+          '${includeDeleted ? '' : ' AND source != ?'}',
       whereArgs: [
         e.amountPaise,
         e.isDebit! ? TxnType.debit.name : TxnType.credit.name,
         time - window,
         time + window,
         e.mode ?? PaymentMode.upi.name,
+        e.upiRef,
+        e.upiRef,
+        if (!includeDeleted) source,
       ],
       orderBy: 'ABS(txn_time - $time)',
       limit: 1,

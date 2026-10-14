@@ -1,4 +1,4 @@
-# Expense Tracker (Flutter) — v0.5.0
+# Dripless — expense tracker (Flutter), v0.5.1
 
 This step gives you a working app with:
 

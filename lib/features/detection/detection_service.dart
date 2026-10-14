@@ -15,6 +15,7 @@ class DetectionStatus {
     required this.promoDismissed,
     required this.sdk,
     required this.smsPermission,
+    this.checks = const [],
   });
 
   static const unsupported = DetectionStatus(
@@ -44,8 +45,56 @@ class DetectionStatus {
   /// The app may read bank SMS directly (live and past messages).
   final bool smsPermission;
 
+  /// What happened to the last few messages, newest first.
+  final List<MessageCheck> checks;
+
   /// Payments are recorded when either source is allowed.
   bool get isWorking => supported && enabled && (smsPermission || accessEnabled);
+}
+
+/// One line of the "Recent message checks" list.
+class MessageCheck {
+  const MessageCheck({
+    required this.channel,
+    required this.source,
+    required this.outcome,
+    required this.time,
+    this.amountPaise,
+    this.isDebit,
+  });
+
+  /// "sms", "sms_notification" or "app_notification".
+  final String channel;
+
+  /// Bank sender ("HDFCBK ••1234"), app name, or "Phone number".
+  final String source;
+
+  /// "recorded", "merged", "not_payment", "paused" or "not_bank".
+  final String outcome;
+  final DateTime time;
+  final int? amountPaise;
+  final bool? isDebit;
+
+  static List<MessageCheck> parseList(Object? raw) {
+    if (raw is! String || raw.isEmpty) return const [];
+    try {
+      final list = jsonDecode(raw) as List<dynamic>;
+      return [
+        for (final item in list)
+          if (item is Map<String, dynamic>)
+            MessageCheck(
+              channel: item['channel'] as String? ?? '',
+              source: item['source'] as String? ?? '',
+              outcome: item['outcome'] as String? ?? '',
+              time: DateTime.fromMillisecondsSinceEpoch((item['time'] as num?)?.toInt() ?? 0),
+              amountPaise: (item['amountPaise'] as num?)?.toInt(),
+              isDebit: item['isDebit'] as bool?,
+            ),
+      ];
+    } on FormatException {
+      return const [];
+    }
+  }
 }
 
 /// Result of asking Android for the SMS permission.
@@ -89,6 +138,7 @@ class DetectionService {
         promoDismissed: m['promoDismissed'] == true,
         sdk: (m['sdk'] as num?)?.toInt() ?? 0,
         smsPermission: m['smsPermission'] == true,
+        checks: MessageCheck.parseList(m['checkLog']),
       );
     } on PlatformException {
       return DetectionStatus.unsupported;

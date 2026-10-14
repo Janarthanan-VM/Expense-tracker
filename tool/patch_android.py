@@ -50,7 +50,7 @@ if "allowBackup" not in manifest:
 components = """
         <service
             android:name=".PaymentNotificationListener"
-            android:label="Expense Tracker payment detection"
+            android:label="Dripless payment detection"
             android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
             android:exported="true">
             <intent-filter>
@@ -78,6 +78,11 @@ if "PaymentNotificationListener" not in manifest:
 for required in ["RECEIVE_SMS", "READ_SMS", "SmsReceiver", "PaymentNotificationListener"]:
     if required not in manifest:
         fail(f"{required} missing from AndroidManifest.xml after patching")
+
+# Name shown under the icon on the phone.
+manifest, n = re.subn(r'android:label="[^"]*"', 'android:label="Dripless"', manifest, count=1)
+if n != 1:
+    fail("could not set the app name (android:label) in AndroidManifest.xml")
 
 manifest_path.write_text(manifest)
 
