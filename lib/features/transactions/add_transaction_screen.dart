@@ -9,7 +9,6 @@ import '../../core/theme/ui.dart';
 import '../../core/utils/formatters.dart';
 import '../categories/category.dart';
 import '../categories/category_picker_sheet.dart';
-import 'payment_mode_ui.dart';
 import 'txn.dart';
 
 Future<void> openTransactionEditor(
@@ -49,6 +48,9 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
   bool _remember = false;
   late DateTime _time;
   bool _saving = false;
+
+  /// Shown under the amount; the field itself is too narrow for an error line.
+  String? _amountError;
 
   bool get _isEdit => widget.existing != null;
 
@@ -119,6 +121,10 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
   }
 
   Future<void> _save() async {
+    if (parseRupeesToPaise(_amount.text) == null) {
+      setState(() => _amountError = 'Enter an amount above ₹0');
+      return;
+    }
     if (!_formKey.currentState!.validate()) return;
     setState(() => _saving = true);
 
@@ -238,34 +244,34 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
             const SizedBox(height: 28),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: kGutter),
-              child: TextFormField(
-                controller: _amount,
-                autofocus: !_isEdit,
-                textAlign: TextAlign.center,
-                style: t.displayMedium?.copyWith(
-                  color: paid ? p.moneyOut : p.moneyIn,
-                  fontFeatures: kTabular,
-                ),
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))],
-                decoration: InputDecoration(
-                  filled: false,
-                  border: InputBorder.none,
-                  enabledBorder: InputBorder.none,
-                  focusedBorder: InputBorder.none,
-                  errorBorder: InputBorder.none,
-                  focusedErrorBorder: InputBorder.none,
-                  hintText: '0',
-                  hintStyle: t.displayMedium?.copyWith(color: p.faint),
-                  prefixText: '₹ ',
-                  prefixStyle: t.headlineMedium?.copyWith(color: p.muted),
-                  errorStyle: t.bodySmall?.copyWith(color: Theme.of(context).colorScheme.error),
-                  contentPadding: EdgeInsets.zero,
-                ),
-                validator: (v) =>
-                    parseRupeesToPaise(v ?? '') == null ? 'Enter an amount above ₹0' : null,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(top: 10, right: 6),
+                    child: Text('₹', style: t.headlineMedium?.copyWith(color: p.muted)),
+                  ),
+                  Flexible(
+                    child: IntrinsicWidth(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(minWidth: 48),
+                        child: _amountField(p, t, paid),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
+            if (_amountError != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  _amountError!,
+                  textAlign: TextAlign.center,
+                  style: t.bodySmall?.copyWith(color: Theme.of(context).colorScheme.error),
+                ),
+              ),
             const SizedBox(height: 20),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: kGutter),
@@ -277,7 +283,6 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                   for (final mode in PaymentMode.values)
                     Pill(
                       label: mode.shortLabel,
-                      icon: mode.icon,
                       selected: _mode == mode,
                       onTap: () => setState(() => _mode = mode),
                     ),
@@ -346,7 +351,37 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
           ],
         ),
       ),
-      bottomNavigationBar: SafeArea(
+      bottomNavigationBar: _saveBar(context),
+    );
+  }
+
+  Widget _amountField(AppPalette p, TextTheme t, bool paid) => TextFormField(
+                controller: _amount,
+                autofocus: !_isEdit,
+                textAlign: TextAlign.center,
+                style: t.displayMedium?.copyWith(
+                  color: paid ? p.moneyOut : p.moneyIn,
+                  fontFeatures: kTabular,
+                ),
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))],
+                decoration: InputDecoration(
+                  filled: false,
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  errorBorder: InputBorder.none,
+                  focusedErrorBorder: InputBorder.none,
+                  hintText: '0',
+                  hintStyle: t.displayMedium?.copyWith(color: p.faint),
+                  contentPadding: EdgeInsets.zero,
+                ),
+                onChanged: (_) {
+                  if (_amountError != null) setState(() => _amountError = null);
+                },
+              );
+
+  Widget _saveBar(BuildContext context) => SafeArea(
         child: Padding(
           padding: EdgeInsets.fromLTRB(
             kGutter,
@@ -360,9 +395,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
             child: Text(_isEdit ? 'Save changes' : 'Save'),
           ),
         ),
-      ),
-    );
-  }
+      );
 
   static InputDecoration _inline(String hint, AppPalette p, TextTheme t) => InputDecoration(
         hintText: hint,

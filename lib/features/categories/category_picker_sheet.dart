@@ -114,7 +114,7 @@ class _CategoryPickerBodyState extends State<_CategoryPickerBody> {
                 gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
                   maxCrossAxisExtent: 96,
                   // Room for the icon plus two lines of name at large font sizes.
-                  mainAxisExtent: 112,
+                  mainAxisExtent: 108,
                   mainAxisSpacing: 4,
                   crossAxisSpacing: 4,
                 ),
@@ -140,11 +140,8 @@ class _CategoryPickerBodyState extends State<_CategoryPickerBody> {
                           children: [
                             IconTile(icon: c.icon, color: c.color, size: 46),
                             const SizedBox(height: 8),
-                            Text(
+                            _TileLabel(
                               c.name,
-                              maxLines: 2,
-                              textAlign: TextAlign.center,
-                              overflow: TextOverflow.ellipsis,
                               style: t.labelMedium?.copyWith(
                                 height: 1.25,
                                 color: selected ? p.ink : p.muted,
@@ -161,6 +158,32 @@ class _CategoryPickerBodyState extends State<_CategoryPickerBody> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Category name under its icon. A single long word ("Entertainment") is
+/// scaled down to fit rather than broken mid-word.
+class _TileLabel extends StatelessWidget {
+  const _TileLabel(this.text, {this.style});
+
+  final String text;
+  final TextStyle? style;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!text.trim().contains(' ')) {
+      return FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Text(text, maxLines: 1, style: style),
+      );
+    }
+    return Text(
+      text,
+      maxLines: 2,
+      textAlign: TextAlign.center,
+      overflow: TextOverflow.ellipsis,
+      style: style,
     );
   }
 }

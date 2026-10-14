@@ -379,6 +379,7 @@ class _Breakdown extends StatelessWidget {
             child: SizedBox(
               height: 12,
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   for (var i = 0; i < segments.length; i++) ...[
                     if (i > 0) const SizedBox(width: 2),

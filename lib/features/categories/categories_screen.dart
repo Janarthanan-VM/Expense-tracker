@@ -19,7 +19,7 @@ class CategoriesScreen extends ConsumerWidget {
         title: const Text('Categories'),
         actions: [
           Padding(
-            padding: const EdgeInsets.only(right: 12),
+            padding: const EdgeInsets.only(right: kGutter - 4),
             child: OutlinedButton.icon(
               onPressed: () => _addCategory(context, ref),
               icon: const Icon(Icons.add, size: 18),
@@ -42,7 +42,7 @@ class CategoriesScreen extends ConsumerWidget {
             Padding(
               padding: const EdgeInsets.fromLTRB(kGutter, 0, kGutter, 0),
               child: Text(
-                'Tap a category to rename it. Switch one off to hide it from the picker; '
+                'Tap a category to rename it. Use the eye to hide one from the picker; '
                 'payments already in it keep it.',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
@@ -293,7 +293,15 @@ class _CategoryRow extends StatelessWidget {
                 ],
               ),
             ),
-            Switch(value: !c.isHidden, onChanged: onVisible),
+            IconButton(
+              tooltip: c.isHidden ? 'Show in picker' : 'Hide from picker',
+              onPressed: () => onVisible(c.isHidden),
+              icon: Icon(
+                c.isHidden ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                color: c.isHidden ? p.faint : p.muted,
+                size: 22,
+              ),
+            ),
           ],
         ),
       ),
