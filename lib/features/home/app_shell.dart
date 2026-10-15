@@ -85,10 +85,11 @@ class _AppShellState extends ConsumerState<AppShell> with WidgetsBindingObserver
     return Scaffold(
       body: IndexedStack(index: _index, children: _pages),
       floatingActionButton: _index <= 1
-          ? FloatingActionButton(
-              tooltip: 'Add transaction',
+          ? FloatingActionButton.extended(
+              tooltip: 'Add an expense or money received by hand',
               onPressed: () => openTransactionEditor(context),
-              child: const Icon(Icons.add, size: 28),
+              icon: const Icon(Icons.add, size: 24),
+              label: const Text('Add expense'),
             )
           : null,
       bottomNavigationBar: DecoratedBox(

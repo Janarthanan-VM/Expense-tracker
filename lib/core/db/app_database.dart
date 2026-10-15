@@ -10,7 +10,7 @@ class AppDatabase {
 
   final Database db;
 
-  static const int schemaVersion = 3;
+  static const int schemaVersion = 4;
   static const String fileName = 'expense_tracker.db';
 
   static Future<AppDatabase> open() async {
@@ -28,6 +28,7 @@ class AppDatabase {
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) await _migrateToV2(db);
         if (oldVersion < 3) await _migrateToV3(db);
+        if (oldVersion < 4) await _migrateToV4(db);
       },
     );
     return AppDatabase._(db);
@@ -39,6 +40,7 @@ class AppDatabase {
     await _createSchemaV1(db);
     await _migrateToV2(db);
     await _migrateToV3(db);
+    await _migrateToV4(db);
     await _seedDefaultCategories(db);
   }
 
@@ -144,6 +146,16 @@ class AppDatabase {
       'CREATE INDEX idx_txn_payment_mode ON transactions(payment_mode)',
     );
   }
+
+  /// v4: small key/value settings stored with the data (last backup time).
+  static Future<void> _migrateToV4(Database db) async {
+    await db.execute(
+      'CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)',
+    );
+  }
+
+  /// Opens an already-created database, for tests.
+  static AppDatabase wrap(Database db) => AppDatabase._(db);
 
   static Future<void> _seedDefaultCategories(Database db) async {
     final batch = db.batch();

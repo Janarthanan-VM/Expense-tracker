@@ -1,6 +1,12 @@
-# Dripless — expense tracker (Flutter), v0.5.1
+# Dripless (Flutter) — v0.6.0
 
 This step gives you a working app with:
+
+- **v0.6.0**: Scan & Pay (Google's QR scanner, pay with any UPI app, recorded
+  straight away and confirmed by the bank SMS); password-encrypted backup and
+  restore to any location; CSV export; month history on Home; undo after
+  delete; remembered payees you can remove; search by amount; permanent
+  release signing (see "Signing" below) so updates keep your data.
 
 - **Modern, minimal design (v0.5.0)**: Manrope font bundled in the app,
   a calm grey/white palette with one marigold accent for things that need
@@ -48,7 +54,7 @@ receiver, SMS inbox import, parser, notification buttons) and `tool/patch_androi
 components to the generated Android project. The GitHub workflow copies both
 in and runs the parser's unit tests (`native/android/test/`).
 
-Coming next: backup & restore, Scan & Pay.
+Coming next: budgets, split payments.
 
 ---
 
@@ -134,3 +140,21 @@ lib/
   twice when it arrives from Scan & Pay, a notification and an SMS. Deleted
   payments keep their reference so they are not captured again.
 - **Transfers** between your own accounts are excluded from spending and income.
+
+
+## Signing (keeps data across updates)
+
+Android only installs an update over an app signed with the same key. Add two
+repository secrets (Settings > Secrets and variables > Actions):
+
+- `DRIPLESS_KEYSTORE`: the base64 text of the release keystore
+- `DRIPLESS_KEY_PASSWORD`: its password
+
+Without them, each build uses a temporary key and CI shows a warning. Never
+commit the keystore; `*.jks` is ignored by git.
+
+## Tests
+
+`flutter test` runs parser, repository (real SQLite via sqflite_common_ffi),
+backup/restore/CSV, UPI QR and full screen-flow tests. CI also runs the
+Android parser tests and publishes screenshots to the UI preview release.

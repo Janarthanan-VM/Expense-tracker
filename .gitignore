@@ -14,3 +14,7 @@ pubspec.lock
 # OS
 .DS_Store
 Thumbs.db
+
+# Signing keys never go in the repository
+*.jks
+*.keystore

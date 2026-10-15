@@ -186,3 +186,31 @@ class MonthSummary {
   /// are left out.
   final Map<PaymentMode, int> spentByMode;
 }
+
+/// An "Always use this category for ..." rule.
+class PayeeRule {
+  const PayeeRule({
+    required this.key,
+    required this.categoryId,
+    required this.isDebit,
+    this.name,
+    this.vpa,
+  });
+
+  /// Stored key, e.g. "debit|vpa:shop@okaxis".
+  final String key;
+  final String categoryId;
+
+  /// The rule applies to money paid (true) or money received (false).
+  final bool isDebit;
+  final String? name;
+  final String? vpa;
+
+  String get label {
+    final n = name?.trim();
+    if (n != null && n.isNotEmpty) return n;
+    final v = vpa?.trim();
+    if (v != null && v.isNotEmpty) return v;
+    return key.substring(key.indexOf(':') + 1);
+  }
+}

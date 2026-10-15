@@ -11,6 +11,9 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
+import com.google.mlkit.vision.barcode.common.Barcode
+import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
+import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodCall
@@ -23,6 +26,10 @@ class MainActivity : FlutterActivity() {
 
     /** Answer for "requestSmsPermission", sent when the user responds. */
     private var pendingSmsResult: MethodChannel.Result? = null
+
+    /** Waiting for the file picker or a UPI app to come back. */
+    private var pendingActivity: MethodChannel.Result? = null
+    private var pendingSaveBytes: ByteArray? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -98,6 +105,10 @@ class MainActivity : FlutterActivity() {
                     result.success(null)
                 }
                 "requestSmsPermission" -> requestSmsPermission(result)
+                "saveDocument" -> saveDocument(call, result)
+                "openDocument" -> openDocument(result)
+                "scanQr" -> scanQr(result)
+                "payUpi" -> payUpi(call, result)
                 "importSmsHistory" -> importSmsHistory(call, result)
                 "takeEvents" -> result.success(store.takeAll())
                 "requeueEvents" -> {
@@ -141,6 +152,147 @@ class MainActivity : FlutterActivity() {
             }
         } catch (e: Exception) {
             result.error("detection_error", e.message, null)
+        }
+    }
+
+    // ------------------------------------------------------------ files, QR, UPI
+
+    private fun startForResult(intent: Intent, code: Int, result: MethodChannel.Result) {
+        if (pendingActivity != null) {
+            result.error("busy", "Another screen is already open", null)
+            return
+        }
+        pendingActivity = result
+        try {
+            startActivityForResult(intent, code)
+        } catch (e: Exception) {
+            pendingActivity = null
+            pendingSaveBytes = null
+            result.error("no_app", e.message, null)
+        }
+    }
+
+    /** Lets the user pick where to save (phone, Google Drive, ...). Replies true when written. */
+    private fun saveDocument(call: MethodCall, result: MethodChannel.Result) {
+        val name = call.argument<String>("name") ?: "dripless"
+        val mime = call.argument<String>("mime") ?: "application/octet-stream"
+        val bytes = call.argument<ByteArray>("bytes")
+        if (bytes == null) {
+            result.error("no_data", "Nothing to save", null)
+            return
+        }
+        pendingSaveBytes = bytes
+        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT)
+            .addCategory(Intent.CATEGORY_OPENABLE)
+            .setType(mime)
+            .putExtra(Intent.EXTRA_TITLE, name)
+        startForResult(intent, REQUEST_SAVE, result)
+    }
+
+    /** Lets the user pick a file; replies with its bytes, or null if cancelled. */
+    private fun openDocument(result: MethodChannel.Result) {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT)
+            .addCategory(Intent.CATEGORY_OPENABLE)
+            .setType("*/*")
+        startForResult(intent, REQUEST_OPEN, result)
+    }
+
+    /** Google's QR scanner: no camera permission needed. Replies with the text, or null. */
+    private fun scanQr(result: MethodChannel.Result) {
+        val options = GmsBarcodeScannerOptions.Builder()
+            .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
+            .enableAutoZoom()
+            .build()
+        var answered = false
+        fun reply(block: () -> Unit) {
+            if (!answered) {
+                answered = true
+                block()
+            }
+        }
+        GmsBarcodeScanning.getClient(this, options).startScan()
+            .addOnSuccessListener { code -> reply { result.success(code.rawValue) } }
+            .addOnCanceledListener { reply { result.success(null) } }
+            .addOnFailureListener { e -> reply { result.error("scan_failed", e.message, null) } }
+    }
+
+    /**
+     * Opens the user's UPI app with a upi://pay link. Replies with
+     * {"resultCode": Int, "response": String?}; the response is the UPI app's
+     * "txnId=...&Status=SUCCESS&..." text when it sends one.
+     */
+    private fun payUpi(call: MethodCall, result: MethodChannel.Result) {
+        val uri = call.arguments as? String
+        if (uri == null || !uri.startsWith("upi://")) {
+            result.error("bad_link", "Not a UPI payment link", null)
+            return
+        }
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(uri))
+        if (packageManager.queryIntentActivities(intent, 0).isEmpty()) {
+            result.error("no_upi_app", "No UPI app is installed", null)
+            return
+        }
+        startForResult(Intent.createChooser(intent, "Pay with"), REQUEST_PAY, result)
+    }
+
+    @Deprecated("Uses the platform API that FlutterActivity forwards")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != REQUEST_SAVE && requestCode != REQUEST_OPEN && requestCode != REQUEST_PAY) return
+        val result = pendingActivity ?: return
+        pendingActivity = null
+        val main = Handler(Looper.getMainLooper())
+        when (requestCode) {
+            REQUEST_SAVE -> {
+                val bytes = pendingSaveBytes
+                pendingSaveBytes = null
+                val uri = data?.data
+                if (resultCode != RESULT_OK || uri == null || bytes == null) {
+                    result.success(false)
+                    return
+                }
+                Thread {
+                    try {
+                        contentResolver.openOutputStream(uri, "wt")?.use { it.write(bytes) }
+                            ?: throw IllegalStateException("Could not open the file")
+                        main.post { result.success(true) }
+                    } catch (e: Exception) {
+                        main.post { result.error("write_failed", e.message, null) }
+                    }
+                }.start()
+            }
+            REQUEST_OPEN -> {
+                val uri = data?.data
+                if (resultCode != RESULT_OK || uri == null) {
+                    result.success(null)
+                    return
+                }
+                Thread {
+                    try {
+                        val bytes = contentResolver.openInputStream(uri)?.use { input ->
+                            val out = java.io.ByteArrayOutputStream()
+                            val buf = ByteArray(64 * 1024)
+                            var total = 0
+                            while (true) {
+                                val n = input.read(buf)
+                                if (n < 0) break
+                                total += n
+                                if (total > MAX_FILE_BYTES) throw IllegalStateException("The file is too large")
+                                out.write(buf, 0, n)
+                            }
+                            out.toByteArray()
+                        } ?: throw IllegalStateException("Could not open the file")
+                        main.post { result.success(bytes) }
+                    } catch (e: Exception) {
+                        main.post { result.error("read_failed", e.message, null) }
+                    }
+                }.start()
+            }
+            REQUEST_PAY -> {
+                val response = data?.getStringExtra("response")
+                    ?: data?.getStringExtra("Status")?.let { "Status=$it" }
+                result.success(mapOf("resultCode" to resultCode, "response" to response))
+            }
         }
     }
 
@@ -251,6 +403,10 @@ class MainActivity : FlutterActivity() {
     companion object {
         private const val CHANNEL = "expense_tracker/upi_detection"
         private const val REQUEST_SMS = 1002
+        private const val REQUEST_SAVE = 1101
+        private const val REQUEST_OPEN = 1102
+        private const val REQUEST_PAY = 1103
+        private const val MAX_FILE_BYTES = 50 * 1024 * 1024
         private const val DAY_MS = 24L * 60 * 60 * 1000
         private val SMS_PERMISSIONS = arrayOf(
             Manifest.permission.RECEIVE_SMS,

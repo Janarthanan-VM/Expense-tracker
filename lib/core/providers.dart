@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../features/backup/backup_service.dart';
 import '../features/categories/category.dart';
 import '../features/categories/category_repository.dart';
 import '../features/detection/detection_service.dart';
@@ -7,6 +8,7 @@ import '../features/detection/detection_sync.dart';
 import '../features/transactions/transaction_repository.dart';
 import '../features/transactions/txn.dart';
 import 'db/app_database.dart';
+import 'platform_actions.dart';
 
 /// Overridden in main() with the opened database.
 final databaseProvider = Provider<AppDatabase>(
@@ -39,13 +41,24 @@ final recentTxnsProvider =
 final toCategorizeProvider =
     FutureProvider<List<Txn>>((ref) => ref.watch(txnRepoProvider).toCategorize());
 
+/// The month shown on Home (first day of that month). Starts at this month.
+final selectedMonthProvider = StateProvider<DateTime>((ref) {
+  final now = DateTime.now();
+  return DateTime(now.year, now.month);
+});
+
 final monthSummaryProvider = FutureProvider<MonthSummary>(
-  (ref) => ref.watch(txnRepoProvider).monthSummary(DateTime.now()),
+  (ref) => ref.watch(txnRepoProvider).monthSummary(ref.watch(selectedMonthProvider)),
 );
 
-/// This month's spending per day, for the bars on Home.
+/// Spending per day of the selected month, for the bars on Home.
 final dailySpendProvider = FutureProvider<List<int>>(
-  (ref) => ref.watch(txnRepoProvider).dailySpend(DateTime.now()),
+  (ref) => ref.watch(txnRepoProvider).dailySpend(ref.watch(selectedMonthProvider)),
+);
+
+/// "Always use for ..." rules, for Settings.
+final payeeRulesProvider = FutureProvider<List<PayeeRule>>(
+  (ref) => ref.watch(txnRepoProvider).payeeRules(),
 );
 
 /// Filters for the transaction list. A record, so equal filters share a cache.
@@ -60,13 +73,22 @@ final txnListProvider = FutureProvider.autoDispose.family<List<Txn>, TxnFilter>(
 );
 
 /// Call after any change to transactions or categories so every screen updates.
-void refreshAll(WidgetRef ref) {
-  ref.invalidate(categoriesProvider);
-  ref.invalidate(recentTxnsProvider);
-  ref.invalidate(toCategorizeProvider);
-  ref.invalidate(monthSummaryProvider);
-  ref.invalidate(dailySpendProvider);
-  ref.invalidate(txnListProvider);
+void refreshAll(WidgetRef ref) => invalidateData(ref.invalidate);
+
+/// Same as [refreshAll], usable after the calling widget is gone (for
+/// example from a snackbar's Undo button) via a ProviderContainer.
+void invalidateData(void Function(ProviderOrFamily provider) invalidate) {
+  for (final provider in <ProviderOrFamily>[
+    categoriesProvider,
+    recentTxnsProvider,
+    toCategorizeProvider,
+    monthSummaryProvider,
+    dailySpendProvider,
+    payeeRulesProvider,
+    txnListProvider,
+  ]) {
+    invalidate(provider);
+  }
 }
 
 // ---------------------------------------------------------- automatic detection
@@ -83,4 +105,15 @@ final detectionSyncProvider = Provider(
 
 final detectionStatusProvider = FutureProvider<DetectionStatus>(
   (ref) => ref.watch(detectionServiceProvider).status(),
+);
+
+// ---------------------------------------------------------------- backup, files
+
+final platformActionsProvider = Provider((ref) => const PlatformActions());
+
+final backupServiceProvider =
+    Provider((ref) => BackupService(ref.watch(databaseProvider).db));
+
+final lastBackupProvider = FutureProvider<DateTime?>(
+  (ref) => ref.watch(backupServiceProvider).lastBackup(),
 );

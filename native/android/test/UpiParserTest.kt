@@ -279,4 +279,73 @@ class UpiParserTest {
     @Test fun inrWithColon() {
         assertEquals(125000L, parse("INR:1,250.00 debited from A/c XX12 via UPI Ref 428611110000", strict = true).amountPaise)
     }
+
+    // ------------------------------------------------------------ more banks (v0.6.0)
+
+    @Test fun canaraDebited() {
+        val p = parse(
+            "An amount of INR 150.00 has been DEBITED to your account XXX1234 on 15/10/2026 towards UPI. " +
+                "Total Avail.bal INR 1,000.00 - Canara Bank",
+            strict = true,
+        )
+        assertEquals(15000L, p.amountPaise)
+        assertTrue(p.isDebit)
+        assertEquals("1234", p.account)
+    }
+
+    @Test fun pnbDebitWithUpiColonRef() {
+        val p = parse(
+            "A/c XX1234 debited INR 200.00 Dt 15-10-26 13:01 thru UPI:428612340000.Bal INR 5,000.00 " +
+                "Not u?Fwd this SMS to 9264092640 to block UPI.-PNB",
+            strict = true,
+        )
+        assertEquals(20000L, p.amountPaise)
+        assertTrue(p.isDebit)
+        assertEquals("428612340000", p.upiRef)
+    }
+
+    @Test fun kotakSentToVpa() {
+        val p = parse(
+            "Sent Rs.10.00 from Kotak Bank AC X1234 to shop@ybl on 15-10-26.UPI Ref 428600002222. " +
+                "Not you, https://kotak.com/KBANKT/Fraud",
+            strict = true,
+        )
+        assertEquals(1000L, p.amountPaise)
+        assertTrue(p.isDebit)
+        assertEquals("shop@ybl", p.payeeVpa)
+        assertEquals("428600002222", p.upiRef)
+    }
+
+    @Test fun indianBankCreditFromVpa() {
+        val p = parse(
+            "Your a/c no. XXXXXXXX1234 is credited by Rs.500.00 on 15-10-26 by a/c linked to VPA " +
+                "friend@okhdfcbank (UPI Ref no 428699990000).",
+            strict = true,
+        )
+        assertEquals(50000L, p.amountPaise)
+        assertFalse(p.isDebit)
+        assertEquals("friend@okhdfcbank", p.payeeVpa)
+        assertEquals("1234", p.account)
+    }
+
+    @Test fun paytmBankSentToName() {
+        val p = parse(
+            "Rs.50 sent to ABC STORE from Paytm Payments Bank a/c 91XXXX1234. UPI Ref: 428611113333.",
+            strict = true,
+        )
+        assertEquals(5000L, p.amountPaise)
+        assertTrue(p.isDebit)
+        assertEquals("Abc Store", p.payeeName)
+    }
+
+    @Test fun hdfcCreditCardSpend() {
+        val p = parse(
+            "Rs.1,299.00 spent on HDFC Bank Card x1234 at AMAZON on 2026-10-15:13:00:01. Avl Lmt: Rs.50,000.00",
+            strict = true,
+        )
+        assertEquals(129900L, p.amountPaise)
+        assertTrue(p.isDebit)
+        assertEquals("card", p.mode)
+        assertEquals("Amazon", p.payeeName)
+    }
 }

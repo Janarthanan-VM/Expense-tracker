@@ -43,6 +43,49 @@ class TransactionRepository {
     return rows.first['id'] as String?;
   }
 
+  /// Category remembered for this payee ("Always use for ..."), if any.
+  Future<String?> rememberedCategory({required TxnType type, String? vpa, String? name}) {
+    final now = DateTime.now();
+    return _rememberedCategoryFor(Txn(
+      id: '',
+      amountPaise: 1,
+      type: type,
+      status: TxnStatus.pending,
+      source: TxnSource.scanPay,
+      paymentMode: PaymentMode.upi,
+      txnTime: now,
+      createdAt: now,
+      updatedAt: now,
+      payeeVpa: vpa,
+      payeeName: name,
+    ));
+  }
+
+  /// Remembered payees with their category, newest first.
+  Future<List<PayeeRule>> payeeRules() async {
+    final rows = await _db.rawQuery('''
+      SELECT p.match_key AS key, p.display_name AS name, p.vpa AS vpa,
+             p.default_category_id AS category_id, p.updated_at AS updated_at
+      FROM payees p
+      WHERE p.default_category_id IS NOT NULL
+      ORDER BY p.updated_at DESC
+    ''');
+    return [
+      for (final r in rows)
+        PayeeRule(
+          key: r['key']! as String,
+          name: r['name'] as String?,
+          vpa: r['vpa'] as String?,
+          categoryId: r['category_id']! as String,
+          isDebit: !(r['key']! as String).startsWith('credit|'),
+        ),
+    ];
+  }
+
+  /// Forgets one "Always use for ..." rule. Payments keep their category.
+  Future<void> deletePayeeRule(String key) =>
+      _db.delete('payees', where: 'match_key = ?', whereArgs: [key]);
+
   // ---------------------------------------------------------------- writes
 
   /// Saves a new transaction. If the payee has a remembered category, it is
@@ -159,6 +202,34 @@ class TransactionRepository {
         where: 'id = ?',
         whereArgs: [id],
       );
+
+  /// Undoes [delete].
+  Future<void> restore(String id) => _db.update(
+        'transactions',
+        {'deleted_at': null, 'updated_at': DateTime.now().millisecondsSinceEpoch},
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+
+  /// Records how a Scan & Pay payment ended. A bank [upiRef] is kept when it
+  /// is not already used, so the bank SMS later merges into this payment.
+  Future<void> setStatus(String id, TxnStatus status, {String? upiRef}) async {
+    final updates = <String, Object?>{
+      'status': status.name,
+      'updated_at': DateTime.now().millisecondsSinceEpoch,
+    };
+    if (upiRef != null) {
+      final taken = await _db.query(
+        'transactions',
+        columns: ['id'],
+        where: 'upi_ref = ? AND id != ?',
+        whereArgs: [upiRef, id],
+        limit: 1,
+      );
+      if (taken.isEmpty) updates['upi_ref'] = upiRef;
+    }
+    await _db.update('transactions', updates, where: 'id = ?', whereArgs: [id]);
+  }
 
   // ---------------------------------------------------------------- detection
 
@@ -279,6 +350,11 @@ class TransactionRepository {
   /// Adds payee, UPI ID, reference or app when the saved payment lacks them.
   Future<bool> _fillMissing(Txn existing, DetectedPayment e) async {
     final updates = <String, Object?>{};
+    // A bank SMS or app notification confirms a Scan & Pay payment that was
+    // still waiting for its result.
+    if (existing.status == TxnStatus.pending && e.hasPayment) {
+      updates['status'] = TxnStatus.success.name;
+    }
     if (existing.payeeName == null && e.payeeName != null) updates['payee_name'] = e.payeeName;
     if (existing.payeeVpa == null && e.payeeVpa != null) updates['payee_vpa'] = e.payeeVpa;
     if (existing.upiApp == null && e.app != null) updates['upi_app'] = e.app;
@@ -352,8 +428,15 @@ class TransactionRepository {
     final where = <String>[_notDeleted];
     final args = <Object>[];
     if (query.isNotEmpty) {
-      where.add('(payee_name $like OR payee_vpa $like OR note $like)');
-      args.addAll(List.filled(3, '%$escaped%'));
+      // "250" or "₹1,249.50" also finds that exact amount.
+      final amount = double.tryParse(query.replaceAll(RegExp(r'[₹,\s]|rs\.?', caseSensitive: false), ''));
+      final amountPaise = amount == null || amount <= 0 ? null : (amount * 100).round();
+      where.add(
+        '(payee_name $like OR payee_vpa $like OR note $like OR upi_app $like'
+        '${amountPaise == null ? '' : ' OR amount_paise = ?'})',
+      );
+      args.addAll(List.filled(4, '%$escaped%'));
+      if (amountPaise != null) args.add(amountPaise);
     }
     if (mode != null) {
       where.add('payment_mode = ?');

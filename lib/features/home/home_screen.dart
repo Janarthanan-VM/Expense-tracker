@@ -9,6 +9,7 @@ import '../../core/theme/ui.dart';
 import '../../core/utils/formatters.dart';
 import '../categories/category.dart';
 import '../detection/detection_screen.dart';
+import '../scanpay/scan_pay_screen.dart';
 import '../transactions/add_transaction_screen.dart';
 import '../transactions/categorize_action.dart';
 import '../transactions/payment_mode_ui.dart';
@@ -36,6 +37,12 @@ class HomeScreen extends ConsumerWidget {
         !detection.smsPermission &&
         !detection.promoDismissed;
     final s = summary.valueOrNull;
+    final month = ref.watch(selectedMonthProvider);
+    final now = DateTime.now();
+    final isCurrentMonth = month.year == now.year && month.month == now.month;
+    void moveMonth(int delta) {
+      ref.read(selectedMonthProvider.notifier).state = DateTime(month.year, month.month + delta);
+    }
 
     return Scaffold(
       body: SafeArea(
@@ -51,11 +58,17 @@ class HomeScreen extends ConsumerWidget {
                   padding: const EdgeInsets.all(kGutter),
                   child: Text('Could not load this month: ${summary.error}'),
                 ),
-              _Hero(summary: s),
+              _MonthBar(
+                month: month,
+                onPrevious: () => moveMonth(-1),
+                onNext: isCurrentMonth ? null : () => moveMonth(1),
+                onScan: () => openScanPay(context),
+              ),
+              _Hero(summary: s, isCurrentMonth: isCurrentMonth),
               if (daily != null && daily.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(kGutter, 28, kGutter, 0),
-                  child: DailyBars(totals: daily, today: DateTime.now().day),
+                  child: DailyBars(totals: daily, today: isCurrentMonth ? now.day : null),
                 ),
               if (pending.isNotEmpty) ...[
                 const SizedBox(height: 24),
@@ -105,10 +118,56 @@ class HomeScreen extends ConsumerWidget {
 }
 
 /// Month name, the amount spent, and money in / kept.
+/// "‹ October 2026 ›" and the Scan & Pay button.
+class _MonthBar extends StatelessWidget {
+  const _MonthBar({
+    required this.month,
+    required this.onPrevious,
+    required this.onNext,
+    required this.onScan,
+  });
+
+  final DateTime month;
+  final VoidCallback onPrevious;
+  final VoidCallback? onNext;
+  final VoidCallback onScan;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    final t = Theme.of(context).textTheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(kGutter - 12, 8, kGutter - 4, 0),
+      child: Row(
+        children: [
+          IconButton(
+            tooltip: 'Previous month',
+            onPressed: onPrevious,
+            icon: Icon(Icons.chevron_left, color: p.muted),
+          ),
+          Text(formatMonth(month), style: t.titleSmall?.copyWith(color: p.muted)),
+          IconButton(
+            tooltip: 'Next month',
+            onPressed: onNext,
+            icon: Icon(Icons.chevron_right, color: onNext == null ? p.line : p.muted),
+          ),
+          const Spacer(),
+          OutlinedButton.icon(
+            onPressed: onScan,
+            icon: const Icon(Icons.qr_code_scanner, size: 18),
+            label: const Text('Scan & Pay'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _Hero extends StatelessWidget {
-  const _Hero({required this.summary});
+  const _Hero({required this.summary, required this.isCurrentMonth});
 
   final MonthSummary? summary;
+  final bool isCurrentMonth;
 
   @override
   Widget build(BuildContext context) {
@@ -121,16 +180,14 @@ class _Hero extends StatelessWidget {
     final kept = income - spent;
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(kGutter, 20, kGutter, 0),
+      padding: const EdgeInsets.fromLTRB(kGutter, 12, kGutter, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(formatMonth(month), style: t.titleSmall?.copyWith(color: p.muted)),
-          const SizedBox(height: 18),
           Text('Spent', style: t.bodyMedium?.copyWith(color: p.muted)),
           const SizedBox(height: 4),
           Semantics(
-            label: 'Spent ${formatPaise(spent)} this month',
+            label: 'Spent ${formatPaise(spent)} in ${formatMonth(month)}',
             excludeSemantics: true,
             child: FittedBox(
               fit: BoxFit.scaleDown,
@@ -215,8 +272,8 @@ class DailyBars extends StatelessWidget {
 
   final List<int> totals;
 
-  /// Day of month (1-based) to highlight.
-  final int today;
+  /// Day of month (1-based) to highlight; null for a past month.
+  final int? today;
   final double height;
 
   @override
@@ -224,11 +281,15 @@ class DailyBars extends StatelessWidget {
     final p = context.palette;
     final t = Theme.of(context).textTheme;
     final maxValue = totals.fold<int>(0, math.max);
-    final todayIndex = (today - 1).clamp(0, totals.length - 1);
-    final todayAmount = totals[todayIndex];
+    final current = today != null;
+    // For a past month every day is "before today".
+    final todayIndex = current ? (today! - 1).clamp(0, totals.length - 1) : totals.length;
+    final todayAmount = current ? totals[todayIndex] : maxValue;
 
     return Semantics(
-      label: 'Daily spending this month. Today ${formatPaise(todayAmount)}.',
+      label: current
+          ? 'Daily spending this month. Today ${formatPaise(todayAmount)}.'
+          : 'Daily spending. Busiest day ${formatPaise(todayAmount)}.',
       excludeSemantics: true,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -236,14 +297,16 @@ class DailyBars extends StatelessWidget {
           Row(
             children: [
               Expanded(child: Text('Each day', style: t.bodySmall)),
-              Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(color: p.accent, shape: BoxShape.circle),
-              ),
-              const SizedBox(width: 6),
+              if (current) ...[
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(color: p.accent, shape: BoxShape.circle),
+                ),
+                const SizedBox(width: 6),
+              ],
               Text(
-                'Today ${formatPaise(todayAmount)}',
+                current ? 'Today ${formatPaise(todayAmount)}' : 'Busiest day ${formatPaise(todayAmount)}',
                 style: t.labelMedium?.copyWith(fontFeatures: kTabular),
               ),
             ],
@@ -539,10 +602,32 @@ class _FirstRun extends StatelessWidget {
     final t = Theme.of(context).textTheme;
     return Padding(
       padding: const EdgeInsets.fromLTRB(kGutter, 4, kGutter, 0),
-      child: Text(
-        'Nothing yet. Tap + to add a cash or UPI payment, or set up automatic '
-        'recording in Settings.',
-        style: t.bodyMedium?.copyWith(color: context.palette.muted),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Nothing yet. Add a cash or UPI expense by hand, scan a QR to pay, or turn on '
+            'automatic recording in Settings.',
+            style: t.bodyMedium?.copyWith(color: context.palette.muted),
+          ),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              FilledButton.icon(
+                onPressed: () => openTransactionEditor(context),
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('Add expense'),
+              ),
+              OutlinedButton.icon(
+                onPressed: () => openScanPay(context),
+                icon: const Icon(Icons.qr_code_scanner, size: 18),
+                label: const Text('Scan & Pay'),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

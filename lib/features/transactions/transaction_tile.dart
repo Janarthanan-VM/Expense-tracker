@@ -38,6 +38,13 @@ class TransactionTile extends StatelessWidget {
     final Widget subtitle;
     if (isFailed) {
       subtitle = Text('Failed', style: t.bodySmall?.copyWith(color: Theme.of(context).colorScheme.error));
+    } else if (txn.status == TxnStatus.pending) {
+      subtitle = Text(
+        'Waiting for bank confirmation',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: t.bodySmall?.copyWith(color: p.attention),
+      );
     } else if (cat == null) {
       subtitle = Text(
         'Choose category',

@@ -4,7 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/ui.dart';
+import '../../core/utils/formatters.dart';
+import '../backup/backup_screen.dart';
 import '../detection/detection_screen.dart';
+import '../scanpay/scan_pay_screen.dart';
+import 'payee_rules_screen.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -14,6 +18,7 @@ class SettingsScreen extends ConsumerWidget {
     final p = context.palette;
     final detection = ref.watch(detectionStatusProvider).valueOrNull;
     final recording = detection?.isWorking ?? false;
+    final lastBackup = ref.watch(lastBackupProvider).valueOrNull;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
@@ -45,20 +50,47 @@ class SettingsScreen extends ConsumerWidget {
               ),
             ],
           ),
-          const SectionHeader('Coming soon'),
+          const SectionHeader('Pay and organise'),
+          Group(
+            children: [
+              _SettingRow(
+                icon: Icons.qr_code_scanner,
+                color: p.moneyIn,
+                title: 'Scan & Pay',
+                subtitle: 'Scan a UPI QR, pay with your UPI app, recorded straight away',
+                onTap: () => openScanPay(context),
+              ),
+              _SettingRow(
+                icon: Icons.person_search_outlined,
+                color: p.muted,
+                title: 'Remembered payees',
+                subtitle: 'Payees that always get the same category',
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const PayeeRulesScreen()),
+                ),
+              ),
+            ],
+          ),
+          const SectionHeader('Your data'),
           Group(
             children: [
               _SettingRow(
                 icon: Icons.backup_outlined,
-                color: p.muted,
+                color: lastBackup == null ? p.attention : p.muted,
                 title: 'Backup and restore',
-                subtitle: 'An encrypted backup file you can keep anywhere',
-              ),
-              _SettingRow(
-                icon: Icons.qr_code_scanner,
-                color: p.muted,
-                title: 'Scan & Pay',
-                subtitle: 'Scan a UPI QR here and pay with your UPI app',
+                subtitle: lastBackup == null
+                    ? 'No backup yet. Save one to Google Drive or your phone'
+                    : 'Last backup ${formatDateTime(lastBackup)}',
+                trailing: lastBackup == null
+                    ? Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(color: p.accent, shape: BoxShape.circle),
+                      )
+                    : null,
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const BackupScreen()),
+                ),
               ),
             ],
           ),
@@ -75,7 +107,7 @@ class SettingsScreen extends ConsumerWidget {
                 icon: Icons.info_outline,
                 color: p.muted,
                 title: 'Dripless',
-                subtitle: 'Version 0.5.1',
+                subtitle: '0.6.0',
               ),
             ],
           ),

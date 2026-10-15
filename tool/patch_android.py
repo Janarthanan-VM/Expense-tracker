@@ -75,7 +75,19 @@ if "PaymentNotificationListener" not in manifest:
         fail("expected exactly one </application> in AndroidManifest.xml")
     manifest = manifest.replace("</application>", components.strip() , 1)
 
-for required in ["RECEIVE_SMS", "READ_SMS", "SmsReceiver", "PaymentNotificationListener"]:
+# Android 11+ only lets the app see UPI apps it declares interest in.
+UPI_QUERY = """
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="upi" />
+        </intent>"""
+if 'android:scheme="upi"' not in manifest:
+    if "<queries>" in manifest:
+        manifest = manifest.replace("<queries>", "<queries>" + UPI_QUERY, 1)
+    else:
+        manifest = manifest.replace("</manifest>", "    <queries>" + UPI_QUERY + "\n    </queries>\n</manifest>", 1)
+
+for required in ["RECEIVE_SMS", "READ_SMS", "SmsReceiver", "PaymentNotificationListener", 'android:scheme="upi"']:
     if required not in manifest:
         fail(f"{required} missing from AndroidManifest.xml after patching")
 
@@ -97,8 +109,35 @@ gradle, n = re.subn(
 if n == 0 and "minSdk = maxOf(" not in gradle:
     fail("could not find minSdk in build.gradle.kts")
 
+# Release signing: when CI has written dripless-release.jks (from the
+# DRIPLESS_KEYSTORE secret), every build is signed with the same key, so a new
+# APK installs over the old one and keeps the user's data.
+if "dripless-release.jks" not in gradle:
+    gradle += """
+val driplessKeystore = file("dripless-release.jks")
+if (driplessKeystore.exists()) {
+    android {
+        signingConfigs {
+            create("dripless") {
+                storeFile = driplessKeystore
+                storePassword = System.getenv("DRIPLESS_KEY_PASSWORD")
+                keyAlias = "dripless"
+                keyPassword = System.getenv("DRIPLESS_KEY_PASSWORD")
+            }
+        }
+        buildTypes.getByName("release").signingConfig = signingConfigs.getByName("dripless")
+    }
+}
+"""
+
 if "junit:junit" not in gradle:
-    gradle += '\ndependencies {\n    testImplementation("junit:junit:4.13.2")\n}\n'
+    gradle += (
+        "\ndependencies {\n"
+        '    testImplementation("junit:junit:4.13.2")\n'
+        # Google's QR scanner for Scan & Pay (runs in Play services, no camera permission).
+        '    implementation("com.google.android.gms:play-services-code-scanner:16.1.0")\n'
+        "}\n"
+    )
 
 gradle_path.write_text(gradle)
 

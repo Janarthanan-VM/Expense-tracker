@@ -184,22 +184,27 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
     if (mounted) Navigator.pop(context);
   }
 
+  /// Deletes straight away and offers Undo on the screen underneath.
   Future<void> _delete() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete this transaction?'),
-        content: const Text('It will be removed from all lists and totals.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete')),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-    await ref.read(txnRepoProvider).delete(widget.existing!.id);
+    final id = widget.existing!.id;
+    final repo = ref.read(txnRepoProvider);
+    final container = ProviderScope.containerOf(context, listen: false);
+    final messenger = ScaffoldMessenger.of(context);
+    await repo.delete(id);
     refreshAll(ref);
     if (mounted) Navigator.pop(context);
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+        content: const Text('Transaction deleted'),
+        action: SnackBarAction(
+          label: 'Undo',
+          onPressed: () async {
+            await repo.restore(id);
+            invalidateData(container.invalidate);
+          },
+        ),
+      ));
   }
 
   @override

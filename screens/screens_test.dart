@@ -8,8 +8,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'package:expense_tracker/core/db/app_database.dart';
 import 'package:expense_tracker/core/providers.dart';
+import 'package:expense_tracker/features/backup/backup_screen.dart';
+import 'package:expense_tracker/features/scanpay/scan_pay_screen.dart';
 import 'package:expense_tracker/core/theme/app_theme.dart';
 import 'package:expense_tracker/features/categories/default_categories.dart';
 import 'package:expense_tracker/features/detection/detection_service.dart';
@@ -100,8 +104,12 @@ MonthSummary _summary() => MonthSummary(
       },
     );
 
+late Database _db;
+
 Widget _app({required ThemeMode mode}) => ProviderScope(
       overrides: [
+        databaseProvider.overrideWithValue(AppDatabase.wrap(_db)),
+        lastBackupProvider.overrideWith((ref) async => null),
         categoriesProvider.overrideWith((ref) async => defaultCategories),
         recentTxnsProvider.overrideWith((ref) async => _txns.take(5).toList()),
         toCategorizeProvider.overrideWith(
@@ -133,7 +141,12 @@ Future<void> _shot(String name) => expectLater(
     );
 
 void main() {
-  setUpAll(_loadFonts);
+  setUpAll(() async {
+    await _loadFonts();
+    sqfliteFfiInit();
+    _db = await databaseFactoryFfiNoIsolate.openDatabase(inMemoryDatabasePath);
+    await AppDatabase.createSchema(_db);
+  });
 
   Future<void> start(WidgetTester tester, ThemeMode mode) async {
     tester.view.physicalSize = const Size(1080, 2340);
@@ -188,5 +201,25 @@ void main() {
     await tester.tap(find.byIcon(Icons.tune_outlined));
     await _settle(tester);
     await _shot('7-settings-dark');
+  });
+
+  testWidgets('scan and pay', (tester) async {
+    await start(tester, ThemeMode.light);
+    Navigator.of(tester.element(find.byType(AppShell))).push(MaterialPageRoute(
+      builder: (_) => const ScanPayScreen(
+        initialQr: 'upi://pay?pa=sristores@okaxis&pn=Sri%20Krishna%20Stores&mc=5411',
+      ),
+    ));
+    await _settle(tester);
+    await _shot('8-scan-pay');
+  });
+
+  testWidgets('backup', (tester) async {
+    await start(tester, ThemeMode.light);
+    Navigator.of(tester.element(find.byType(AppShell))).push(
+      MaterialPageRoute(builder: (_) => const BackupScreen()),
+    );
+    await _settle(tester);
+    await _shot('9-backup');
   });
 }

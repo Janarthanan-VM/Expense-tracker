@@ -45,7 +45,9 @@ jobs:
 
       - name: Add packages
         working-directory: app
-        run: flutter pub add flutter_riverpod:^2.6.1 sqflite_sqlcipher path flutter_secure_storage uuid intl
+        run: |
+          flutter pub add flutter_riverpod:^2.6.1 sqflite_sqlcipher path flutter_secure_storage uuid intl cryptography
+          flutter pub add --dev sqflite_common_ffi
 
       - name: Bundle fonts
         working-directory: app
@@ -63,10 +65,29 @@ jobs:
 
       - name: Test (Dart)
         working-directory: app
-        run: flutter test
+        run: |
+          set +e
+          flutter test --reporter json > ../dart-tests.json
+          code=$?
+          set -e
+          python3 ../tool/report_flutter_failures.py ../dart-tests.json "Dart tests"
+          exit $code
+
+      - name: Release signing key (keeps data across updates)
+        env:
+          DRIPLESS_KEYSTORE: ${{ secrets.DRIPLESS_KEYSTORE }}
+        run: |
+          if [ -n "$DRIPLESS_KEYSTORE" ]; then
+            echo "$DRIPLESS_KEYSTORE" | base64 -d > app/android/app/dripless-release.jks
+            echo "::notice title=Signing::Signed with the permanent Dripless key; this APK updates over earlier ones and keeps data."
+          else
+            echo "::warning title=Signing::No DRIPLESS_KEYSTORE secret, so this APK uses a temporary key and cannot update over a previous build."
+          fi
 
       - name: Build APK
         working-directory: app
+        env:
+          DRIPLESS_KEY_PASSWORD: ${{ secrets.DRIPLESS_KEY_PASSWORD }}
         run: flutter build apk --release
 
       - name: Test (Android payment parser)
@@ -78,22 +99,6 @@ jobs:
       - name: Report Android test results
         if: always()
         run: python3 tool/report_junit.py app gradle-test.log
-
-      - name: Database tests (detected payments)
-        id: dbtests
-        continue-on-error: true
-        working-directory: app
-        run: |
-          flutter pub add --dev sqflite_common_ffi
-          mkdir -p test_db
-          cp ../dbtest/*.dart test_db/
-          set +e
-          flutter test test_db --reporter json > ../dbtests.json
-          code=$?
-          set -e
-          python3 ../tool/report_flutter_failures.py ../dbtests.json "Database tests"
-          grep -o '"type":"done","success":[a-z]*' ../dbtests.json || true
-          exit $code
 
       - name: Screenshots (design review)
         id: screens
