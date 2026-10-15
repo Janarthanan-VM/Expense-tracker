@@ -51,7 +51,7 @@ void main() {
   }
 
   Future<void> openAdd(WidgetTester tester) async {
-    await tester.tap(find.byType(FloatingActionButton));
+    await tester.tap(find.byTooltip('Add an expense or money received by hand'));
     await settle(tester);
   }
 

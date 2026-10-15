@@ -216,14 +216,14 @@ void main() {
 
   testWidgets('add', (tester) async {
     await start(tester, ThemeMode.light);
-    await tester.tap(find.byType(FloatingActionButton));
+    await tester.tap(find.byTooltip('Add an expense or money received by hand'));
     await _settle(tester);
     await _shot('4-add');
   });
 
   testWidgets('category picker', (tester) async {
     await start(tester, ThemeMode.light);
-    await tester.tap(find.byType(FloatingActionButton));
+    await tester.tap(find.byTooltip('Add an expense or money received by hand'));
     await _settle(tester);
     await tester.tap(find.text('Choose category').last);
     await _settle(tester);
