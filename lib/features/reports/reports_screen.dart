@@ -90,7 +90,8 @@ class _PeriodBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = context.palette;
     final t = Theme.of(context).textTheme;
-    final label = range.year ? '${range.anchor.year}' : formatMonth(range.anchor);
+    // Short month ("Oct 2026") so it fits beside the Month / Year pills.
+    final label = range.year ? '${range.anchor.year}' : DateFormat('MMM yyyy').format(range.anchor);
     return Padding(
       padding: const EdgeInsets.fromLTRB(kGutter - 4, 0, kGutter - 4, 4),
       child: Row(
