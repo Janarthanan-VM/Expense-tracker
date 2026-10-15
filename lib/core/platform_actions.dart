@@ -32,12 +32,6 @@ class PlatformActions {
     return _channel.invokeMethod<Uint8List>('openDocument');
   }
 
-  /// Scans a QR code. Returns its text, or null if the user backed out.
-  Future<String?> scanQr() async {
-    if (!supported) return null;
-    return _channel.invokeMethod<String>('scanQr');
-  }
-
   /// Opens a UPI app for [upiLink]. Returns the UPI app's response text,
   /// which may be null when the app sends nothing back.
   Future<({int resultCode, String? response})> payUpi(String upiLink) async {

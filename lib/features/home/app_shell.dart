@@ -7,6 +7,7 @@ import '../categories/categories_screen.dart';
 import '../reports/reports_screen.dart';
 import '../detection/detection_service.dart';
 import '../settings/settings_screen.dart';
+import '../scanpay/scan_pay_screen.dart';
 import '../transactions/add_transaction_screen.dart';
 import '../transactions/categorize_action.dart';
 import '../transactions/to_categorize_screen.dart';
@@ -87,11 +88,26 @@ class _AppShellState extends ConsumerState<AppShell> with WidgetsBindingObserver
     return Scaffold(
       body: IndexedStack(index: _index, children: _pages),
       floatingActionButton: _index <= 1
-          ? FloatingActionButton.extended(
-              tooltip: 'Add an expense or money received by hand',
-              onPressed: () => openTransactionEditor(context),
-              icon: const Icon(Icons.add, size: 24),
-              label: const Text('Add expense'),
+          ? Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                FloatingActionButton(
+                  heroTag: 'scan-pay',
+                  tooltip: 'Scan & Pay',
+                  onPressed: () => openScanPay(context),
+                  backgroundColor: context.palette.raised,
+                  foregroundColor: context.palette.ink,
+                  child: const Icon(Icons.qr_code_scanner, size: 24),
+                ),
+                const SizedBox(width: 12),
+                FloatingActionButton.extended(
+                  heroTag: 'add-expense',
+                  tooltip: 'Add an expense or money received by hand',
+                  onPressed: () => openTransactionEditor(context),
+                  icon: const Icon(Icons.add, size: 24),
+                  label: const Text('Add expense'),
+                ),
+              ],
             )
           : null,
       bottomNavigationBar: DecoratedBox(

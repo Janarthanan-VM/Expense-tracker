@@ -10,6 +10,7 @@ import '../../core/utils/formatters.dart';
 import '../categories/category.dart';
 import '../categories/category_picker_sheet.dart';
 import '../transactions/txn.dart';
+import 'qr_scanner_page.dart';
 import 'upi_qr.dart';
 
 Future<void> openScanPay(BuildContext context) => Navigator.of(context).push(
@@ -58,14 +59,7 @@ class _ScanPayScreenState extends ConsumerState<ScanPayScreen> {
   }
 
   Future<void> _scan() async {
-    String? raw;
-    try {
-      raw = await ref.read(platformActionsProvider).scanQr();
-    } on PlatformException catch (e) {
-      setState(() => _error = 'The scanner could not start: ${e.message ?? e.code}. '
-          'Make sure Google Play services is up to date.');
-      return;
-    }
+    final raw = await scanQrCode(context);
     if (!mounted) return;
     if (raw == null) {
       // Backed out of the scanner before scanning anything: leave.

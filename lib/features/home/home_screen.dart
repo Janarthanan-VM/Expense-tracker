@@ -9,7 +9,6 @@ import '../../core/theme/ui.dart';
 import '../../core/utils/formatters.dart';
 import '../categories/category.dart';
 import '../detection/detection_screen.dart';
-import '../scanpay/scan_pay_screen.dart';
 import '../transactions/add_transaction_screen.dart';
 import '../transactions/categorize_action.dart';
 import '../transactions/payment_mode_ui.dart';
@@ -63,7 +62,6 @@ class HomeScreen extends ConsumerWidget {
                 month: month,
                 onPrevious: () => moveMonth(-1),
                 onNext: isCurrentMonth ? null : () => moveMonth(1),
-                onScan: () => openScanPay(context),
               ),
               _Hero(summary: s, isCurrentMonth: isCurrentMonth),
               if (daily != null && daily.isNotEmpty)
@@ -123,19 +121,17 @@ class HomeScreen extends ConsumerWidget {
 }
 
 /// Month name, the amount spent, and money in / kept.
-/// "‹ October 2026 ›" and the Scan & Pay button.
+/// "‹ October 2026 ›".
 class _MonthBar extends StatelessWidget {
   const _MonthBar({
     required this.month,
     required this.onPrevious,
     required this.onNext,
-    required this.onScan,
   });
 
   final DateTime month;
   final VoidCallback onPrevious;
   final VoidCallback? onNext;
-  final VoidCallback onScan;
 
   @override
   Widget build(BuildContext context) {
@@ -168,12 +164,6 @@ class _MonthBar extends StatelessWidget {
                 ),
               ],
             ),
-          ),
-          const SizedBox(width: 8),
-          OutlinedButton.icon(
-            onPressed: onScan,
-            icon: const Icon(Icons.qr_code_scanner, size: 18),
-            label: const Text('Scan & Pay'),
           ),
         ],
       ),

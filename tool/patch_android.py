@@ -26,6 +26,8 @@ PERMISSIONS = [
     # Read bank SMS directly and import past ones (credit / debit tracking).
     "android.permission.RECEIVE_SMS",
     "android.permission.READ_SMS",
+    # Scan & Pay reads UPI QR codes with the camera, inside the app.
+    "android.permission.CAMERA",
 ]
 for permission in PERMISSIONS:
     if permission in manifest:
@@ -134,8 +136,6 @@ if "junit:junit" not in gradle:
     gradle += (
         "\ndependencies {\n"
         '    testImplementation("junit:junit:4.13.2")\n'
-        # Google's QR scanner for Scan & Pay (runs in Play services, no camera permission).
-        '    implementation("com.google.android.gms:play-services-code-scanner:16.1.0")\n'
         "}\n"
     )
 

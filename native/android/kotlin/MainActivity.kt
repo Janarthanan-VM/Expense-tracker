@@ -11,9 +11,6 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
-import com.google.mlkit.vision.barcode.common.Barcode
-import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
-import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodCall
@@ -153,7 +150,6 @@ class MainActivity : FlutterActivity() {
                     result.success(null)
                 }
                 "openDocument" -> openDocument(result)
-                "scanQr" -> scanQr(result)
                 "payUpi" -> payUpi(call, result)
                 "importSmsHistory" -> importSmsHistory(call, result)
                 "takeEvents" -> result.success(store.takeAll())
@@ -241,25 +237,6 @@ class MainActivity : FlutterActivity() {
             .addCategory(Intent.CATEGORY_OPENABLE)
             .setType("*/*")
         startForResult(intent, REQUEST_OPEN, result)
-    }
-
-    /** Google's QR scanner: no camera permission needed. Replies with the text, or null. */
-    private fun scanQr(result: MethodChannel.Result) {
-        val options = GmsBarcodeScannerOptions.Builder()
-            .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
-            .enableAutoZoom()
-            .build()
-        var answered = false
-        fun reply(block: () -> Unit) {
-            if (!answered) {
-                answered = true
-                block()
-            }
-        }
-        GmsBarcodeScanning.getClient(this, options).startScan()
-            .addOnSuccessListener { code -> reply { result.success(code.rawValue) } }
-            .addOnCanceledListener { reply { result.success(null) } }
-            .addOnFailureListener { e -> reply { result.error("scan_failed", e.message, null) } }
     }
 
     /**

@@ -46,7 +46,7 @@ jobs:
       - name: Add packages
         working-directory: app
         run: |
-          flutter pub add flutter_riverpod:^2.6.1 sqflite_sqlcipher path flutter_secure_storage uuid intl cryptography
+          flutter pub add flutter_riverpod:^2.6.1 sqflite_sqlcipher path flutter_secure_storage uuid intl cryptography mobile_scanner:5.2.3
           flutter pub add --dev sqflite_common_ffi
 
       - name: Bundle fonts
