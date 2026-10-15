@@ -239,4 +239,56 @@ void main() {
     expect(await repo.owedToYou(), 75000);
     expect(find.text('₹250'), findsWidgets, reason: 'Home shows your share as spent');
   });
+
+  testWidgets('create a new category from the picker while adding', (tester) async {
+    await start(tester);
+    await openAdd(tester);
+    await tester.enterText(find.byType(TextField).at(0), '900');
+    await tester.tap(find.text('Choose category').last);
+    await settle(tester);
+    await tester.tap(find.text('New category'));
+    await settle(tester);
+    await tester.enterText(find.byType(TextField).last, 'Gym');
+    await tester.pump();
+    await tester.tap(find.text('Create and use'));
+    await settle(tester);
+    expect(find.text('Gym'), findsWidgets, reason: 'the new category is selected');
+    await tester.tap(find.text('Save'));
+    await settle(tester);
+    await settle(tester);
+    final t = (await repo.list()).single;
+    final cat = await db.query('categories', where: 'id = ?', whereArgs: [t.categoryId]);
+    expect(cat.single['name'], 'Gym');
+    expect(cat.single['kind'], 'expense');
+  });
+
+  testWidgets('Reports shows spending and money received for the month', (tester) async {
+    final now = DateTime.now();
+    Txn t(String id, int paise, TxnType type) => Txn(
+          id: id,
+          amountPaise: paise,
+          type: type,
+          status: TxnStatus.success,
+          source: TxnSource.manual,
+          paymentMode: PaymentMode.cash,
+          txnTime: now,
+          createdAt: now,
+          updatedAt: now,
+          payeeName: id,
+          categoryId: type == TxnType.debit ? 'food' : 'salary',
+          isReviewed: true,
+        );
+    await repo.add(t('Lunch', 25000, TxnType.debit));
+    await repo.add(t('Pay', 1000000, TxnType.credit));
+    await start(tester);
+    await tester.tap(find.byIcon(Icons.pie_chart_outline));
+    await settle(tester);
+    expect(find.text('Where your money went'), findsOneWidget);
+    expect(find.text('Food & dining'), findsWidgets);
+    expect(find.text('₹250'), findsWidgets);
+    await tester.drag(find.byType(ListView).last, const Offset(0, -700));
+    await settle(tester);
+    expect(find.text('Where your money came from'), findsOneWidget);
+    expect(find.text('Salary'), findsWidgets);
+  });
 }

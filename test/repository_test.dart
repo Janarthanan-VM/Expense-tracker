@@ -284,4 +284,60 @@ void main() {
     expect(ids, contains('split_settlement'));
     expect(await repo.topCategoryIds(TxnType.debit, limit: 30), isNot(contains('split_settlement')));
   });
+
+  // ------------------------------------------------------------ reports (v0.8.0)
+
+  test('report: pies, totals and top payees for a month', () async {
+    final food = manual('f1', 30000, payee: 'Swiggy');
+    final food2 = manual('f2', 20000, payee: 'swiggy');
+    final rent = manual('r1', 600000, payee: 'Landlord');
+    for (final t in [food, food2, rent]) {
+      await repo.add(t);
+    }
+    await repo.setCategory(food, 'food');
+    await repo.setCategory(food2, 'food');
+    await repo.setCategory(rent, 'rent');
+    final salary = manual('s1', 4500000, type: TxnType.credit, payee: 'Acme');
+    await repo.add(salary);
+    await repo.setCategory(salary, 'salary');
+    final back = manual('b1', 10000, type: TxnType.credit, payee: 'Ravi');
+    await repo.add(back);
+    await repo.setCategory(back, 'split_settlement');
+    final own = manual('o1', 99900, type: TxnType.credit);
+    await repo.add(own);
+    await repo.setCategory(own, 'self_transfer');
+
+    final start = DateTime(now.year, now.month);
+    final r = await repo.report(start, DateTime(now.year, now.month + 1));
+    expect(r.spentPaise, 650000);
+    expect(r.spending.first.categoryId, 'rent');
+    expect(r.spending.map((x) => x.categoryId), containsAll(['rent', 'food']));
+    expect(r.incomePaise, 4500000, reason: 'paid back and own transfers are not income');
+    expect(r.paidBackPaise, 10000);
+    expect(r.receiving.map((x) => x.categoryId), isNot(contains('self_transfer')));
+    expect(r.topPayees.first.name, 'Landlord');
+    final swiggy = r.topPayees.firstWhere((p) => p.name.toLowerCase() == 'swiggy');
+    expect(swiggy.count, 2, reason: 'names are grouped regardless of case');
+    expect(swiggy.paise, 50000);
+  });
+
+  test('report for a year includes every month of it', () async {
+    await repo.add(manual('jan', 1000, at: DateTime(now.year, 1, 15, 10)));
+    await repo.add(manual('cur', 2000));
+    final r = await repo.report(DateTime(now.year), DateTime(now.year + 1));
+    expect(r.spentPaise, 3000);
+  });
+
+  test('monthly flow buckets money in and out per month', () async {
+    final lastMonth = DateTime(now.year, now.month - 1, 12, 9);
+    await repo.add(manual('a', 5000, at: lastMonth));
+    await repo.add(manual('b', 7000));
+    await repo.add(manual('c', 100000, type: TxnType.credit));
+    final flow = await repo.monthlyFlow(DateTime(now.year, now.month));
+    expect(flow, hasLength(6));
+    expect(flow.last.month, DateTime(now.year, now.month));
+    expect(flow.last.outPaise, 7000);
+    expect(flow.last.inPaise, 100000);
+    expect(flow[4].outPaise, 5000);
+  });
 }

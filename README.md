@@ -1,6 +1,12 @@
-# Dripless (Flutter) — v0.7.0
+# Dripless (Flutter) — v0.8.0
 
 This step gives you a working app with:
+
+- **v0.8.0**: Reports tab (money in/out for a month or year, pie charts of
+  where money went and came from, monthly bars, top payees; chart colours
+  from a colour-blind-checked palette); "New category" straight from the
+  category picker (name only; icon and colour editable later on the
+  Categories page); Dripless logo as app icon, startup screen and in Settings.
 
 - **v0.7.0**: split bills (only your share counts as spending; "Paid back by
   friends" settles what friends owe and is not income; Home shows what friends

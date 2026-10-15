@@ -104,10 +104,14 @@ class SettingsScreen extends ConsumerWidget {
                 subtitle: 'Stored in an encrypted database. Nothing is uploaded.',
               ),
               _SettingRow(
+                leading: ClipRRect(
+                  borderRadius: BorderRadius.circular(AppTheme.tileRadius),
+                  child: Image.asset('assets/images/logo.png', width: 40, height: 40),
+                ),
                 icon: Icons.info_outline,
                 color: p.muted,
                 title: 'Dripless',
-                subtitle: '0.7.0',
+                subtitle: '0.8.0',
               ),
             ],
           ),
@@ -125,6 +129,7 @@ class _SettingRow extends StatelessWidget {
     required this.subtitle,
     this.onTap,
     this.trailing,
+    this.leading,
   });
 
   final IconData icon;
@@ -134,6 +139,9 @@ class _SettingRow extends StatelessWidget {
   final VoidCallback? onTap;
   final Widget? trailing;
 
+  /// Replaces the icon tile (used for the app logo).
+  final Widget? leading;
+
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
@@ -142,7 +150,7 @@ class _SettingRow extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
       child: Row(
         children: [
-          IconTile(icon: icon, color: color),
+          leading ?? IconTile(icon: icon, color: color),
           const SizedBox(width: 14),
           Expanded(
             child: Column(

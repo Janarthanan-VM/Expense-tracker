@@ -14,7 +14,9 @@ if "family: Manrope" in text:
     print("patch_pubspec: fonts already registered")
     sys.exit(0)
 
-FONTS = """  fonts:
+FONTS = """  assets:
+    - assets/images/logo.png
+  fonts:
     - family: Manrope
       fonts:
         - asset: assets/fonts/Manrope-Regular.ttf

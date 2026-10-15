@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../categories/categories_screen.dart';
+import '../reports/reports_screen.dart';
 import '../detection/detection_service.dart';
 import '../settings/settings_screen.dart';
 import '../transactions/add_transaction_screen.dart';
@@ -25,6 +26,7 @@ class _AppShellState extends ConsumerState<AppShell> with WidgetsBindingObserver
   late final List<Widget> _pages = [
     HomeScreen(onSeeAll: () => setState(() => _index = 1)),
     const TransactionListScreen(),
+    const ReportsScreen(),
     const CategoriesScreen(),
     const SettingsScreen(),
   ];
@@ -111,8 +113,13 @@ class _AppShellState extends ConsumerState<AppShell> with WidgetsBindingObserver
               label: 'Transactions',
             ),
             NavigationDestination(
-              icon: Icon(Icons.donut_large_outlined),
-              selectedIcon: Icon(Icons.donut_large),
+              icon: Icon(Icons.pie_chart_outline),
+              selectedIcon: Icon(Icons.pie_chart),
+              label: 'Reports',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.category_outlined),
+              selectedIcon: Icon(Icons.category),
               label: 'Categories',
             ),
             NavigationDestination(

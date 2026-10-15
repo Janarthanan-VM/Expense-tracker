@@ -42,7 +42,7 @@ class CategoriesScreen extends ConsumerWidget {
             Padding(
               padding: const EdgeInsets.fromLTRB(kGutter, 0, kGutter, 0),
               child: Text(
-                'Tap a category to rename it. Use the eye to hide one from the picker; '
+                'Tap a category to change its name, icon or colour. Use the eye to hide one from the picker; '
                 'payments already in it keep it.',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
@@ -69,13 +69,19 @@ class CategoriesScreen extends ConsumerWidget {
     );
   }
 
+  /// Edit name, icon and colour (the kind stays, so totals keep their meaning).
   Future<void> _rename(BuildContext context, WidgetRef ref, TxnCategory c) async {
-    final name = await showDialog<String>(
+    final draft = await showDialog<_CategoryDraft>(
       context: context,
-      builder: (_) => _RenameDialog(initialName: c.name),
+      builder: (_) => _NewCategoryDialog(initial: c),
     );
-    if (name == null || name.isEmpty || name == c.name) return;
-    await ref.read(categoryRepoProvider).rename(c.id, name);
+    if (draft == null || draft.name.isEmpty) return;
+    await ref.read(categoryRepoProvider).update(
+          c.id,
+          name: draft.name,
+          iconKey: draft.iconKey,
+          colorValue: draft.colorValue,
+        );
     refreshAll(ref);
   }
 
@@ -95,49 +101,6 @@ class CategoriesScreen extends ConsumerWidget {
   }
 }
 
-/// Owns its text controller, so it is disposed only after the dialog has
-/// finished closing.
-class _RenameDialog extends StatefulWidget {
-  const _RenameDialog({required this.initialName});
-
-  final String initialName;
-
-  @override
-  State<_RenameDialog> createState() => _RenameDialogState();
-}
-
-class _RenameDialogState extends State<_RenameDialog> {
-  late final TextEditingController _controller =
-      TextEditingController(text: widget.initialName);
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Rename category'),
-      content: TextField(
-        controller: _controller,
-        autofocus: true,
-        textCapitalization: TextCapitalization.sentences,
-        decoration: const InputDecoration(labelText: 'Name'),
-        onSubmitted: (v) => Navigator.pop(context, v.trim()),
-      ),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-        FilledButton(
-          onPressed: () => Navigator.pop(context, _controller.text.trim()),
-          child: const Text('Rename'),
-        ),
-      ],
-    );
-  }
-}
-
 class _CategoryDraft {
   const _CategoryDraft(this.name, this.kind, this.iconKey, this.colorValue);
 
@@ -148,17 +111,22 @@ class _CategoryDraft {
 }
 
 class _NewCategoryDialog extends StatefulWidget {
-  const _NewCategoryDialog();
+  const _NewCategoryDialog({this.initial});
+
+  /// Set when editing an existing category.
+  final TxnCategory? initial;
 
   @override
   State<_NewCategoryDialog> createState() => _NewCategoryDialogState();
 }
 
 class _NewCategoryDialogState extends State<_NewCategoryDialog> {
-  final _name = TextEditingController();
-  CategoryKind _kind = CategoryKind.expense;
-  String _iconKey = kCategoryIcons.keys.first;
-  int _color = kCategoryColors.first;
+  late final TextEditingController _name = TextEditingController(text: widget.initial?.name ?? '');
+  late CategoryKind _kind = widget.initial?.kind ?? CategoryKind.expense;
+  late String _iconKey = widget.initial?.iconKey ?? kCategoryIcons.keys.first;
+  late int _color = widget.initial?.colorValue ?? kCategoryColors.first;
+
+  bool get _editing => widget.initial != null;
 
   @override
   void dispose() {
@@ -170,7 +138,7 @@ class _NewCategoryDialogState extends State<_NewCategoryDialog> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return AlertDialog(
-      title: const Text('New category'),
+      title: Text(_editing ? 'Edit category' : 'New category'),
       content: SizedBox(
         width: double.maxFinite,
         child: SingleChildScrollView(
@@ -185,15 +153,17 @@ class _NewCategoryDialogState extends State<_NewCategoryDialog> {
                 decoration: const InputDecoration(labelText: 'Name'),
                 onChanged: (_) => setState(() {}),
               ),
-              const SizedBox(height: 16),
-              SegmentedButton<CategoryKind>(
-                segments: [
-                  for (final k in CategoryKind.values)
-                    ButtonSegment(value: k, label: Text(k.label)),
-                ],
-                selected: {_kind},
-                onSelectionChanged: (s) => setState(() => _kind = s.first),
-              ),
+              if (!_editing) ...[
+                const SizedBox(height: 16),
+                SegmentedButton<CategoryKind>(
+                  segments: [
+                    for (final k in CategoryKind.values)
+                      ButtonSegment(value: k, label: Text(k.label)),
+                  ],
+                  selected: {_kind},
+                  onSelectionChanged: (s) => setState(() => _kind = s.first),
+                ),
+              ],
               const SizedBox(height: 16),
               Text('Icon', style: theme.textTheme.labelLarge),
               const SizedBox(height: 8),
@@ -248,7 +218,7 @@ class _NewCategoryDialogState extends State<_NewCategoryDialog> {
                     context,
                     _CategoryDraft(_name.text.trim(), _kind, _iconKey, _color),
                   ),
-          child: const Text('Create'),
+          child: Text(_editing ? 'Save' : 'Create'),
         ),
       ],
     );

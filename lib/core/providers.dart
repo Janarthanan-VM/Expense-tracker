@@ -5,6 +5,7 @@ import '../features/categories/category.dart';
 import '../features/categories/category_repository.dart';
 import '../features/detection/detection_service.dart';
 import '../features/detection/detection_sync.dart';
+import '../features/reports/report_data.dart';
 import '../features/transactions/transaction_repository.dart';
 import '../features/transactions/txn.dart';
 import 'db/app_database.dart';
@@ -56,6 +57,25 @@ final dailySpendProvider = FutureProvider<List<int>>(
   (ref) => ref.watch(txnRepoProvider).dailySpend(ref.watch(selectedMonthProvider)),
 );
 
+/// The period shown on the Reports screen. Starts at this month.
+final reportRangeProvider = StateProvider<ReportRange>((ref) {
+  final now = DateTime.now();
+  return ReportRange(anchor: DateTime(now.year, now.month), year: false);
+});
+
+final reportProvider = FutureProvider<PeriodReport>((ref) {
+  final range = ref.watch(reportRangeProvider);
+  return ref.watch(txnRepoProvider).report(range.start, range.end);
+});
+
+/// Month bars: the 12 months of the year, or the 6 months up to the month.
+final monthlyFlowProvider = FutureProvider<List<MonthFlow>>((ref) {
+  final range = ref.watch(reportRangeProvider);
+  return range.year
+      ? ref.watch(txnRepoProvider).monthlyFlow(DateTime(range.anchor.year, 12), months: 12)
+      : ref.watch(txnRepoProvider).monthlyFlow(range.anchor);
+});
+
 /// What friends still owe you for split bills.
 final owedToYouProvider = FutureProvider<int>((ref) => ref.watch(txnRepoProvider).owedToYou());
 
@@ -89,6 +109,8 @@ void invalidateData(void Function(ProviderOrFamily provider) invalidate) {
     dailySpendProvider,
     payeeRulesProvider,
     owedToYouProvider,
+    reportProvider,
+    monthlyFlowProvider,
     txnListProvider,
   ]) {
     invalidate(provider);

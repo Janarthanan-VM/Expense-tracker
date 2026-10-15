@@ -2,6 +2,7 @@ import 'package:sqflite_sqlcipher/sqflite.dart';
 
 import '../categories/default_categories.dart';
 import '../detection/detected_payment.dart';
+import '../reports/report_data.dart';
 import 'txn.dart';
 
 class TransactionRepository {
@@ -563,6 +564,101 @@ class TransactionRepository {
       spentByMode: spentByMode,
       paidBackPaise: (paidBackRows.first['total'] as int?) ?? 0,
     );
+  }
+
+  // ---------------------------------------------------------------- reports
+
+  /// Totals, pies and top payees for [start] (inclusive) to [end] (exclusive).
+  Future<PeriodReport> report(DateTime start, DateTime end) async {
+    final range = [start.millisecondsSinceEpoch, end.millisecondsSinceEpoch];
+    const spendable = "t.deleted_at IS NULL AND t.status = 'success' AND t.type = 'debit' "
+        'AND t.txn_time >= ? AND t.txn_time < ? '
+        "AND (c.kind IS NULL OR c.kind = 'expense')";
+
+    final spendRows = await _db.rawQuery('''
+      SELECT t.category_id AS category_id, SUM($_spendSql) AS total
+      FROM transactions t LEFT JOIN categories c ON c.id = t.category_id
+      WHERE $spendable
+      GROUP BY t.category_id ORDER BY total DESC
+    ''', range);
+
+    // Money in by category; own-account transfers are not money received.
+    final receiveRows = await _db.rawQuery('''
+      SELECT t.category_id AS category_id, SUM(t.amount_paise) AS total
+      FROM transactions t LEFT JOIN categories c ON c.id = t.category_id
+      WHERE t.deleted_at IS NULL AND t.status = 'success' AND t.type = 'credit'
+        AND t.txn_time >= ? AND t.txn_time < ?
+        AND (c.kind IS NULL OR c.kind = 'income' OR t.category_id = '$splitSettlementId')
+      GROUP BY t.category_id ORDER BY total DESC
+    ''', range);
+
+    final payeeRows = await _db.rawQuery('''
+      SELECT COALESCE(NULLIF(TRIM(t.payee_name), ''), t.payee_vpa) AS who,
+             SUM($_spendSql) AS total, COUNT(*) AS n
+      FROM transactions t LEFT JOIN categories c ON c.id = t.category_id
+      WHERE $spendable
+        AND COALESCE(NULLIF(TRIM(t.payee_name), ''), t.payee_vpa) IS NOT NULL
+      GROUP BY LOWER(COALESCE(NULLIF(TRIM(t.payee_name), ''), t.payee_vpa))
+      ORDER BY total DESC LIMIT 5
+    ''', range);
+
+    List<Slice> slices(List<Map<String, Object?>> rows) => [
+          for (final r in rows)
+            if (((r['total'] as int?) ?? 0) > 0)
+              Slice(categoryId: r['category_id'] as String?, paise: r['total']! as int),
+        ];
+    final spending = slices(spendRows);
+    final receiving = slices(receiveRows);
+    final paidBack = receiving
+        .where((s) => s.categoryId == splitSettlementId)
+        .fold<int>(0, (sum, s) => sum + s.paise);
+    final received = receiving.fold<int>(0, (sum, s) => sum + s.paise);
+
+    return PeriodReport(
+      start: start,
+      end: end,
+      spentPaise: spending.fold(0, (sum, s) => sum + s.paise),
+      incomePaise: received - paidBack,
+      paidBackPaise: paidBack,
+      spending: spending,
+      receiving: receiving,
+      topPayees: [
+        for (final r in payeeRows)
+          PayeeTotal(name: r['who']! as String, paise: r['total']! as int, count: r['n']! as int),
+      ],
+    );
+  }
+
+  /// Money out (your spending) and money in (income, plus friends paying you
+  /// back) for each of [months] months ending with [lastMonth].
+  Future<List<MonthFlow>> monthlyFlow(DateTime lastMonth, {int months = 6}) async {
+    final first = DateTime(lastMonth.year, lastMonth.month - months + 1);
+    final end = DateTime(lastMonth.year, lastMonth.month + 1);
+    final rows = await _db.rawQuery('''
+      SELECT t.txn_time AS at, t.type AS type,
+             $_spendSql AS spend, t.amount_paise AS amount, c.kind AS kind, t.category_id AS cat
+      FROM transactions t LEFT JOIN categories c ON c.id = t.category_id
+      WHERE t.deleted_at IS NULL AND t.status = 'success'
+        AND t.txn_time >= ? AND t.txn_time < ?
+    ''', [first.millisecondsSinceEpoch, end.millisecondsSinceEpoch]);
+
+    final out = List<int>.filled(months, 0);
+    final inn = List<int>.filled(months, 0);
+    for (final r in rows) {
+      final at = DateTime.fromMillisecondsSinceEpoch(r['at']! as int);
+      final i = (at.year - first.year) * 12 + at.month - first.month;
+      if (i < 0 || i >= months) continue;
+      final kind = r['kind'] as String?;
+      if (r['type'] == 'debit') {
+        if (kind == null || kind == 'expense') out[i] += r['spend']! as int;
+      } else if (kind == null || kind == 'income' || r['cat'] == splitSettlementId) {
+        inn[i] += r['amount']! as int;
+      }
+    }
+    return [
+      for (var i = 0; i < months; i++)
+        MonthFlow(month: DateTime(first.year, first.month + i), outPaise: out[i], inPaise: inn[i]),
+    ];
   }
 
   /// What friends still owe you across all split bills: the parts of shared

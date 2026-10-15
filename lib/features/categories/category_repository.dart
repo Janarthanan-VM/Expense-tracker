@@ -2,6 +2,7 @@ import 'package:sqflite_sqlcipher/sqflite.dart';
 import 'package:uuid/uuid.dart';
 
 import 'category.dart';
+import 'category_icons.dart';
 
 class CategoryRepository {
   CategoryRepository(this._db);
@@ -18,7 +19,8 @@ class CategoryRepository {
     return rows.map(TxnCategory.fromMap).toList();
   }
 
-  Future<void> add({
+  /// Creates a category and returns its id.
+  Future<String> add({
     required String name,
     required CategoryKind kind,
     required String iconKey,
@@ -32,10 +34,11 @@ class CategoryRepository {
     );
     final maxOrder = (result.first['max_order'] as int?) ?? 0;
 
+    final id = _uuid.v4();
     await _db.insert(
       'categories',
       TxnCategory(
-        id: _uuid.v4(),
+        id: id,
         name: name.trim(),
         iconKey: iconKey,
         colorValue: colorValue,
@@ -43,6 +46,40 @@ class CategoryRepository {
         sortOrder: maxOrder + 1,
       ).toMap(),
     );
+    return id;
+  }
+
+  /// Quick add from the category picker: just a name. The icon and colour can
+  /// be changed later on the Categories page.
+  Future<String> addNamed(String name, CategoryKind kind) async {
+    final count = Sqflite.firstIntValue(await _db.rawQuery('SELECT COUNT(*) FROM categories')) ?? 0;
+    return add(
+      name: name,
+      kind: kind,
+      iconKey: 'label',
+      colorValue: kCategoryColors[count % kCategoryColors.length],
+    );
+  }
+
+  /// Changes name, icon and colour.
+  Future<void> update(String id, {required String name, required String iconKey, required int colorValue}) =>
+      _db.update(
+        'categories',
+        {'name': name.trim(), 'icon_key': iconKey, 'color': colorValue},
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+
+  /// True when a category with this name (any case) already exists for [kind].
+  Future<String?> idForName(String name, CategoryKind kind) async {
+    final rows = await _db.query(
+      'categories',
+      columns: ['id'],
+      where: 'LOWER(TRIM(name)) = ? AND kind = ?',
+      whereArgs: [name.trim().toLowerCase(), kind.name],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : rows.first['id']! as String;
   }
 
   Future<void> rename(String id, String name) => _db.update(

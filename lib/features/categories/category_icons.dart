@@ -28,6 +28,7 @@ const Map<String, IconData> kCategoryIcons = {
   'transfer': Icons.swap_horiz,
   'split': Icons.call_split,
   'other': Icons.more_horiz,
+  'label': Icons.sell_outlined,
 };
 
 IconData categoryIcon(String key) => kCategoryIcons[key] ?? Icons.category;

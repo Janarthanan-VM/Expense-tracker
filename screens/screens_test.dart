@@ -18,6 +18,7 @@ import 'package:expense_tracker/core/theme/app_theme.dart';
 import 'package:expense_tracker/features/categories/default_categories.dart';
 import 'package:expense_tracker/features/detection/detection_service.dart';
 import 'package:expense_tracker/features/home/app_shell.dart';
+import 'package:expense_tracker/features/reports/report_data.dart';
 import 'package:expense_tracker/features/transactions/txn.dart';
 
 Future<void> _loadFonts() async {
@@ -106,6 +107,41 @@ MonthSummary _summary() => MonthSummary(
 
 late Database _db;
 
+PeriodReport _report() => PeriodReport(
+      start: DateTime(_now.year, _now.month),
+      end: DateTime(_now.year, _now.month + 1),
+      spentPaise: 1245000,
+      incomePaise: 4500000,
+      paidBackPaise: 50000,
+      spending: const [
+        Slice(categoryId: 'rent', paise: 600000),
+        Slice(categoryId: 'food', paise: 241000),
+        Slice(categoryId: 'groceries', paise: 186000),
+        Slice(categoryId: null, paise: 98000),
+        Slice(categoryId: 'transport', paise: 64000),
+        Slice(categoryId: 'bills', paise: 34900),
+        Slice(categoryId: 'shopping', paise: 21100),
+      ],
+      receiving: const [
+        Slice(categoryId: 'salary', paise: 4500000),
+        Slice(categoryId: 'split_settlement', paise: 50000),
+      ],
+      topPayees: const [
+        PayeeTotal(name: 'Landlord', paise: 600000, count: 1),
+        PayeeTotal(name: 'Swiggy', paise: 180000, count: 6),
+        PayeeTotal(name: 'Sri Krishna Stores', paise: 124900, count: 3),
+      ],
+    );
+
+List<MonthFlow> _flow() => [
+      for (var i = 5; i >= 0; i--)
+        MonthFlow(
+          month: DateTime(_now.year, _now.month - i),
+          outPaise: [980000, 1120000, 1410000, 1030000, 1310000, 1245000][5 - i],
+          inPaise: [4500000, 4500000, 4650000, 4500000, 4500000, 4550000][5 - i],
+        ),
+    ];
+
 Widget _app({required ThemeMode mode}) => ProviderScope(
       overrides: [
         databaseProvider.overrideWithValue(AppDatabase.wrap(_db)),
@@ -117,6 +153,8 @@ Widget _app({required ThemeMode mode}) => ProviderScope(
         ),
         monthSummaryProvider.overrideWith((ref) async => _summary()),
         dailySpendProvider.overrideWith((ref) async => _daily()),
+        reportProvider.overrideWith((ref) async => _report()),
+        monthlyFlowProvider.overrideWith((ref) async => _flow()),
         txnListProvider.overrideWith((ref, filter) async => _txns),
         detectionStatusProvider.overrideWith((ref) async => DetectionStatus.unsupported),
       ],
@@ -194,7 +232,7 @@ void main() {
 
   testWidgets('categories', (tester) async {
     await start(tester, ThemeMode.light);
-    await tester.tap(find.byIcon(Icons.donut_large_outlined));
+    await tester.tap(find.byIcon(Icons.category_outlined));
     await _settle(tester);
     await _shot('6-categories');
   });
@@ -224,5 +262,21 @@ void main() {
     );
     await _settle(tester);
     await _shot('9-backup');
+  });
+
+  testWidgets('reports light', (tester) async {
+    await start(tester, ThemeMode.light);
+    await tester.tap(find.byIcon(Icons.pie_chart_outline));
+    await _settle(tester);
+    await _shot('10-reports');
+  });
+
+  testWidgets('reports dark, scrolled', (tester) async {
+    await start(tester, ThemeMode.dark);
+    await tester.tap(find.byIcon(Icons.pie_chart_outline));
+    await _settle(tester);
+    await tester.drag(find.byType(ListView).last, const Offset(0, -900));
+    await _settle(tester);
+    await _shot('11-reports-dark');
   });
 }
