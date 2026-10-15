@@ -110,18 +110,18 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: expense-tracker-apk
+          name: dripless-apk
           path: app/build/app/outputs/flutter-apk/app-release.apk
 
       - name: Rename APK for the release
         if: github.ref == 'refs/heads/main'
-        run: cp app/build/app/outputs/flutter-apk/app-release.apk expense-tracker.apk
+        run: cp app/build/app/outputs/flutter-apk/app-release.apk dripless.apk
 
       - name: Publish APK as a GitHub Release (direct download on phone)
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
-          name: Expense Tracker build ${{ github.run_number }}
+          name: Dripless build ${{ github.run_number }}
           make_latest: true
-          files: expense-tracker.apk
+          files: dripless.apk
