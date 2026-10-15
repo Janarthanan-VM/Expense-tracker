@@ -58,7 +58,12 @@ class TransactionTile extends StatelessWidget {
         style: t.bodySmall?.copyWith(color: p.attention),
       );
     } else {
-      subtitle = Text(cat.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: t.bodySmall);
+      subtitle = Text(
+        txn.isSplit ? '${cat.name}, your share ${formatPaise(txn.mySharePaise!)}' : cat.name,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: t.bodySmall,
+      );
     }
 
     return InkWell(

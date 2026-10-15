@@ -16,6 +16,8 @@ class DetectionStatus {
     required this.sdk,
     required this.smsPermission,
     this.checks = const [],
+    this.keepSkippedText = false,
+    this.alertsPopUp = true,
   });
 
   static const unsupported = DetectionStatus(
@@ -48,6 +50,12 @@ class DetectionStatus {
   /// What happened to the last few messages, newest first.
   final List<MessageCheck> checks;
 
+  /// The user chose to keep the text of skipped money messages.
+  final bool keepSkippedText;
+
+  /// Payment alerts can pop up on screen (the user has not lowered them).
+  final bool alertsPopUp;
+
   /// Payments are recorded when either source is allowed.
   bool get isWorking => supported && enabled && (smsPermission || accessEnabled);
 }
@@ -62,6 +70,7 @@ class MessageCheck {
     this.amountPaise,
     this.isDebit,
     this.message,
+    this.text,
   });
 
   /// "sms", "sms_notification", "app_notification" or "app".
@@ -79,6 +88,9 @@ class MessageCheck {
   /// Error text for "save_failed".
   final String? message;
 
+  /// The skipped message itself, only when the user turned that on.
+  final String? text;
+
   static List<MessageCheck> parseList(Object? raw) {
     if (raw is! String || raw.isEmpty) return const [];
     try {
@@ -94,6 +106,7 @@ class MessageCheck {
               amountPaise: (item['amountPaise'] as num?)?.toInt(),
               isDebit: item['isDebit'] as bool?,
               message: item['message'] as String?,
+              text: item['text'] as String?,
             ),
       ];
     } on FormatException {
@@ -144,6 +157,8 @@ class DetectionService {
         sdk: (m['sdk'] as num?)?.toInt() ?? 0,
         smsPermission: m['smsPermission'] == true,
         checks: MessageCheck.parseList(m['checkLog']),
+        keepSkippedText: m['keepSkippedText'] == true,
+        alertsPopUp: m['alertsPopUp'] != false,
       );
     } on PlatformException {
       return DetectionStatus.unsupported;
@@ -167,6 +182,8 @@ class DetectionService {
   Future<void> setEnabled(bool value) => _call('setEnabled', value);
   Future<void> setPromoDismissed(bool value) => _call('setPromoDismissed', value);
   Future<void> setCategoryHints(String json) => _call('setCategoryHints', json);
+  Future<void> setKeepSkippedText(bool value) => _call('setKeepSkippedText', value);
+  Future<void> openAlertSettings() => _call('openAlertSettings');
 
   Future<SmsPermissionResult> requestSmsPermission() async {
     if (!_supported) return SmsPermissionResult.blocked;

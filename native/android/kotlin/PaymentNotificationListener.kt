@@ -1,6 +1,8 @@
 package com.expensetracker.expense_tracker
 
 import android.app.Notification
+import android.content.ComponentName
+import android.os.Build
 import android.os.Bundle
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
@@ -48,16 +50,33 @@ class PaymentNotificationListener : NotificationListenerService() {
                 seenKey = PaymentIntake.SMS_SEEN_KEY,
             )
         } else {
+            val text = "$title. $body"
             PaymentIntake.handle(
                 context = this,
-                text = "$title. $body",
+                text = text,
                 strict = false,
                 kind = "notification",
                 channel = PaymentIntake.CHANNEL_APP,
                 label = source.label,
                 time = sbn.postTime,
                 seenKey = sbn.packageName,
+                // App notifications have no reference number, so two real
+                // "₹10 paid to Chai Point" payments read the same. The app's
+                // own timestamp tells a new payment from a re-post.
+                seenText = "$text|${if (n.`when` > 0) n.`when` else sbn.postTime / 60_000}",
             )
+        }
+    }
+
+    /** Android can unbind the listener (battery savers); ask to be bound again. */
+    override fun onListenerDisconnected() {
+        super.onListenerDisconnected()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            try {
+                requestRebind(ComponentName(this, PaymentNotificationListener::class.java))
+            } catch (e: Exception) {
+                Log.w(TAG, "Could not ask to reconnect", e)
+            }
         }
     }
 

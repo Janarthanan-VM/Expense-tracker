@@ -56,6 +56,9 @@ final dailySpendProvider = FutureProvider<List<int>>(
   (ref) => ref.watch(txnRepoProvider).dailySpend(ref.watch(selectedMonthProvider)),
 );
 
+/// What friends still owe you for split bills.
+final owedToYouProvider = FutureProvider<int>((ref) => ref.watch(txnRepoProvider).owedToYou());
+
 /// "Always use for ..." rules, for Settings.
 final payeeRulesProvider = FutureProvider<List<PayeeRule>>(
   (ref) => ref.watch(txnRepoProvider).payeeRules(),
@@ -85,6 +88,7 @@ void invalidateData(void Function(ProviderOrFamily provider) invalidate) {
     monthSummaryProvider,
     dailySpendProvider,
     payeeRulesProvider,
+    owedToYouProvider,
     txnListProvider,
   ]) {
     invalidate(provider);

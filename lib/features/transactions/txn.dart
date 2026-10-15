@@ -46,6 +46,7 @@ class Txn {
     this.upiApp,
     this.note,
     this.deletedAt,
+    this.mySharePaise,
   });
 
   final String id;
@@ -68,6 +69,18 @@ class Txn {
   final DateTime createdAt;
   final DateTime updatedAt;
   final DateTime? deletedAt;
+
+  /// For a split bill: the part you paid for yourself. Null = not split.
+  /// Spending totals count this instead of [amountPaise].
+  final int? mySharePaise;
+
+  bool get isSplit => mySharePaise != null && mySharePaise! < amountPaise;
+
+  /// What this payment adds to your spending.
+  int get spendPaise => isSplit ? mySharePaise! : amountPaise;
+
+  /// What friends owe you for this bill.
+  int get owedPaise => isSplit ? amountPaise - mySharePaise! : 0;
 
   /// Shown in the "To categorize" list.
   bool get needsCategory =>
@@ -107,6 +120,7 @@ class Txn {
         upiApp: upiApp,
         note: note,
         deletedAt: deletedAt,
+        mySharePaise: mySharePaise,
       );
 
   Map<String, Object?> toMap() => {
@@ -128,6 +142,7 @@ class Txn {
         'created_at': createdAt.millisecondsSinceEpoch,
         'updated_at': updatedAt.millisecondsSinceEpoch,
         'deleted_at': deletedAt?.millisecondsSinceEpoch,
+        'my_share_paise': mySharePaise,
       };
 
   factory Txn.fromMap(Map<String, Object?> m) {
@@ -154,6 +169,7 @@ class Txn {
       createdAt: DateTime.fromMillisecondsSinceEpoch(m['created_at']! as int),
       updatedAt: DateTime.fromMillisecondsSinceEpoch(m['updated_at']! as int),
       deletedAt: deletedAt == null ? null : DateTime.fromMillisecondsSinceEpoch(deletedAt),
+      mySharePaise: m['my_share_paise'] as int?,
     );
   }
 }
@@ -173,6 +189,7 @@ class MonthSummary {
     required this.incomePaise,
     required this.byCategory,
     required this.spentByMode,
+    this.paidBackPaise = 0,
   });
 
   final DateTime month;
@@ -185,6 +202,9 @@ class MonthSummary {
   /// Spending per payment method (cash, UPI, ...). Methods with no spending
   /// are left out.
   final Map<PaymentMode, int> spentByMode;
+
+  /// Money friends sent back for split bills this month (not income).
+  final int paidBackPaise;
 }
 
 /// An "Always use this category for ..." rule.

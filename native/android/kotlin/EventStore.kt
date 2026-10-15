@@ -23,6 +23,14 @@ class EventStore(context: Context) {
     fun isEnabled(): Boolean = prefs.getBoolean(KEY_ENABLED, true)
     fun setEnabled(value: Boolean) = prefs.edit().putBoolean(KEY_ENABLED, value).apply()
 
+    /** Off by default: keep the text of skipped money messages to troubleshoot. */
+    fun keepSkippedText(): Boolean = prefs.getBoolean(KEY_KEEP_TEXT, false)
+    fun setKeepSkippedText(value: Boolean) {
+        val edit = prefs.edit().putBoolean(KEY_KEEP_TEXT, value)
+        if (!value) edit.remove(KEY_LOG) // forget any text kept so far
+        edit.apply()
+    }
+
     fun isPromoDismissed(): Boolean = prefs.getBoolean(KEY_PROMO_DISMISSED, false)
     fun setPromoDismissed(value: Boolean) = prefs.edit().putBoolean(KEY_PROMO_DISMISSED, value).apply()
 
@@ -156,6 +164,7 @@ class EventStore(context: Context) {
         amountPaise: Long? = null,
         isDebit: Boolean? = null,
         message: String? = null,
+        text: String? = null,
     ) {
         val log = readArray(KEY_LOG)
         val entry = JSONObject()
@@ -166,6 +175,7 @@ class EventStore(context: Context) {
         amountPaise?.let { entry.put("amountPaise", it) }
         isDebit?.let { entry.put("isDebit", it) }
         message?.let { entry.put("message", it) }
+        text?.let { entry.put("text", it.take(400)) }
         val kept = JSONArray().put(entry)
         for (i in 0 until minOf(log.length(), LOG_SIZE - 1)) kept.put(log.get(i))
         prefs.edit().putString(KEY_LOG, kept.toString()).apply()
@@ -194,7 +204,7 @@ class EventStore(context: Context) {
         val fallback = if (isDebit) {
             listOf("food" to "Food & dining", "groceries" to "Groceries")
         } else {
-            listOf("received" to "Received from people", "refund" to "Refund")
+            listOf("received" to "Received from people", "split_settlement" to "Paid back by friends")
         }
         val raw = prefs.getString(KEY_HINTS, null) ?: return fallback
         return try {
@@ -234,7 +244,8 @@ class EventStore(context: Context) {
         private const val KEY_RECENT = "recent"
         private const val KEY_HINTS = "hints"
         private const val KEY_LOG = "check_log"
-        private const val LOG_SIZE = 8
+        private const val LOG_SIZE = 20
+        private const val KEY_KEEP_TEXT = "keep_skipped_text"
         private const val DAY_MS = 24L * 60 * 60 * 1000
         private const val MERGE_WINDOW_MS = 5L * 60 * 1000
         private const val RECENT_KEEP_MS = 30L * 60 * 1000

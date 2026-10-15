@@ -13,7 +13,10 @@ import java.util.Locale
 /** Shows "₹250 paid to ..." with one-tap category buttons. */
 object PaymentNotifier {
 
-    private const val CHANNEL_ID = "detected_payments"
+    /** High importance so the "choose a category" alert pops up on screen.
+     *  A new id, because Android never lets an app raise an existing channel. */
+    private const val CHANNEL_ID = "payment_alerts"
+    private const val OLD_CHANNEL_ID = "detected_payments"
     const val EXTRA_EVENT_ID = "event_id"
     const val EXTRA_CATEGORY_ID = "category_id"
     const val EXTRA_CATEGORY_NAME = "category_name"
@@ -30,13 +33,14 @@ object PaymentNotifier {
     private fun ensureChannel(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val nm = context.getSystemService(NotificationManager::class.java) ?: return
+        if (nm.getNotificationChannel(OLD_CHANNEL_ID) != null) nm.deleteNotificationChannel(OLD_CHANNEL_ID)
         if (nm.getNotificationChannel(CHANNEL_ID) != null) return
         val channel = NotificationChannel(
             CHANNEL_ID,
-            "Detected payments",
-            NotificationManager.IMPORTANCE_DEFAULT,
+            "Payment alerts",
+            NotificationManager.IMPORTANCE_HIGH,
         )
-        channel.description = "Choose a category for UPI payments the app records"
+        channel.description = "Pops up after each payment so you can pick its category in one tap"
         nm.createNotificationChannel(channel)
     }
 
@@ -45,7 +49,10 @@ object PaymentNotifier {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             Notification.Builder(context, CHANNEL_ID)
         } else {
+            // Before Android 8 the priority, not a channel, decides the pop-up.
             Notification.Builder(context)
+                .setPriority(Notification.PRIORITY_HIGH)
+                .setDefaults(Notification.DEFAULT_ALL)
         }
 
     private fun immutable(flags: Int) =

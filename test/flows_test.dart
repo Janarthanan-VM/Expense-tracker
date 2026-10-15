@@ -213,4 +213,30 @@ void main() {
     await settle(tester);
     expect(find.text('₹4,000'), findsNothing);
   });
+
+  testWidgets('split a bill equally: only your share is spent, friends owe the rest', (tester) async {
+    await start(tester);
+    await openAdd(tester);
+    await tester.enterText(find.byType(TextField).at(0), '1000');
+    await tester.pump();
+    await tester.tap(find.text('Split with friends'));
+    await settle(tester);
+    expect(find.text('Split ₹1,000'), findsOneWidget);
+    await tester.tap(find.byTooltip('More people'));
+    await tester.tap(find.byTooltip('More people'));
+    await tester.pump();
+    await tester.tap(find.text('Done'));
+    await settle(tester);
+    expect(find.text('Your share ₹250'), findsOneWidget);
+    await tester.tap(find.text('Save'));
+    await settle(tester);
+    await settle(tester);
+
+    final t = (await repo.list()).single;
+    expect(t.amountPaise, 100000);
+    expect(t.mySharePaise, 25000);
+    expect((await repo.monthSummary(DateTime.now())).spentPaise, 25000);
+    expect(await repo.owedToYou(), 75000);
+    expect(find.text('₹250'), findsWidgets, reason: 'Home shows your share as spent');
+  });
 }

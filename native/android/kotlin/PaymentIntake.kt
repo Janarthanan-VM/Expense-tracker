@@ -47,7 +47,8 @@ object PaymentIntake {
         time: Long,
         seenKey: String,
         fixedId: String? = null,
-    ): Outcome = process(EventStore(context), context, text, strict, kind, channel, label, time, seenKey, fixedId)
+        seenText: String = text,
+    ): Outcome = process(EventStore(context), context, text, strict, kind, channel, label, time, seenKey, fixedId, seenText)
 
     private fun process(
         store: EventStore,
@@ -60,12 +61,13 @@ object PaymentIntake {
         time: Long,
         seenKey: String,
         fixedId: String?,
+        seenText: String,
     ): Outcome {
         if (!store.isEnabled()) {
             store.recordCheck(channel, label, Outcome.PAUSED.key, time)
             return Outcome.PAUSED
         }
-        if (!store.markSeen(seenKey, text, time)) {
+        if (!store.markSeen(seenKey, seenText, time)) {
             // The other copy of this message was already handled; not logged
             // again so the list shows one line per message.
             return Outcome.ALREADY_SEEN
@@ -73,7 +75,15 @@ object PaymentIntake {
 
         val parsed = UpiParser.parse(text, strict)
         if (parsed == null) {
-            store.recordCheck(channel, label, Outcome.NOT_PAYMENT.key, time)
+            // Payment apps post many notifications (offers, reminders); only
+            // ones that mention an amount are worth a line in the list.
+            if (channel != CHANNEL_APP || UpiParser.mentionsMoney(text)) {
+                val keep = store.keepSkippedText() && !UpiParser.isSensitive(text)
+                store.recordCheck(
+                    channel, label, Outcome.NOT_PAYMENT.key, time,
+                    text = if (keep) text else null,
+                )
+            }
             return Outcome.NOT_PAYMENT
         }
         val source = labelWithAccount(label, parsed.account)

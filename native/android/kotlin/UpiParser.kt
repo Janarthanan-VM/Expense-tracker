@@ -58,7 +58,7 @@ object UpiParser {
     private val BALANCE_BEFORE = Regex("""(bal|balance|lmt|limit|avl|available)[^0-9]{0,6}$""", IC)
 
     private val DEBIT_WORDS = Regex(
-        """\b(debited|debit(?!\s*card)|paid|sent|spent|transferred|withdrawn|purchase|payment of|used for|used at|dr)\b""",
+        """\b(debited|debit(?!\s*card)|paid|sent|spent|transferred|transfer of|withdrawn|purchase|payment of|payment to|used for|used at|dr)\b""",
         IC,
     )
     private val CREDIT_WORDS = Regex(
@@ -103,6 +103,18 @@ object UpiParser {
 
     /** Extra words a bank SMS must contain, so personal messages are ignored. */
     private val BANK_CUES = Regex("""\b(a/c|acct|account|upi|vpa|card|bank|neft|imps|rtgs|ref|txn)\b""", IC)
+
+    private val OTP_WORDS = Regex("""\b(otp|one time password|verification code|cvv|m-?pin|upi pin)\b""", IC)
+
+    /** True when the text mentions an amount of money (₹, Rs, INR). */
+    fun mentionsMoney(raw: String): Boolean = CURRENCY_AMOUNT.containsMatchIn(raw)
+
+    /**
+     * True for messages that must never be stored, even for troubleshooting:
+     * OTPs, PINs and codes (safety footers like "never share OTP" aside).
+     */
+    fun isSensitive(raw: String): Boolean =
+        OTP_WORDS.containsMatchIn(raw.replace(Regex("""\s+"""), " ").replace(SAFETY_FOOTER, " "))
 
     /**
      * @param strict true for SMS (from messaging apps): require bank-like
@@ -178,8 +190,11 @@ object UpiParser {
         return null
     }
 
+    /** "Ravi Kumar's bank account" -> "Ravi Kumar". */
+    private val ACCOUNT_SUFFIX = Regex("""(?:'s)?\s+(?:bank\s+)?(?:account|a/c|acct)$""", IC)
+
     private fun accept(candidate: String): String? {
-        val name = candidate.trim().trimEnd('.', '-', ',')
+        val name = candidate.trim().trimEnd('.', '-', ',').replace(ACCOUNT_SUFFIX, "").trim()
         if (name.length < 2) return null
         if (NOT_A_NAME.containsMatchIn(name)) return null
         if (name.all { it.isDigit() || it == ' ' || it == '-' || it == '/' }) return null

@@ -40,6 +40,42 @@ class MainActivity : FlutterActivity() {
         captureOpenRequest(intent)
     }
 
+    override fun onResume() {
+        super.onResume()
+        // If Android unbound the notification reader in the background,
+        // opening the app asks for it to be connected again.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && isListenerEnabled()) {
+            try {
+                android.service.notification.NotificationListenerService.requestRebind(listenerComponent())
+            } catch (e: Exception) {
+                // Nothing to do: the user can toggle access in settings.
+            }
+        }
+    }
+
+    /** True when payment alerts can pop up (channel not lowered by the user). */
+    private fun alertsPopUp(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return true
+        val nm = getSystemService(NotificationManager::class.java) ?: return true
+        val channel = nm.getNotificationChannel("payment_alerts") ?: return true
+        return channel.importance >= NotificationManager.IMPORTANCE_HIGH
+    }
+
+    private fun openAlertSettings() {
+        val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+                .putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+                .putExtra(Settings.EXTRA_CHANNEL_ID, "payment_alerts")
+        } else {
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))
+        }
+        try {
+            startActivity(intent)
+        } catch (e: Exception) {
+            openNotificationSettings()
+        }
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
@@ -73,6 +109,8 @@ class MainActivity : FlutterActivity() {
                         "promoDismissed" to store.isPromoDismissed(),
                         "smsPermission" to hasSmsPermission(),
                         "checkLog" to store.checkLog(),
+                        "keepSkippedText" to store.keepSkippedText(),
+                        "alertsPopUp" to alertsPopUp(),
                         "sdk" to Build.VERSION.SDK_INT,
                     ),
                 )
@@ -106,6 +144,14 @@ class MainActivity : FlutterActivity() {
                 }
                 "requestSmsPermission" -> requestSmsPermission(result)
                 "saveDocument" -> saveDocument(call, result)
+                "setKeepSkippedText" -> {
+                    store.setKeepSkippedText(call.arguments as? Boolean ?: false)
+                    result.success(null)
+                }
+                "openAlertSettings" -> {
+                    openAlertSettings()
+                    result.success(null)
+                }
                 "openDocument" -> openDocument(result)
                 "scanQr" -> scanQr(result)
                 "payUpi" -> payUpi(call, result)

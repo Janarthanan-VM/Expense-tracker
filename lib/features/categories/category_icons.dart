@@ -26,6 +26,7 @@ const Map<String, IconData> kCategoryIcons = {
   'received': Icons.call_received,
   'cashback': Icons.savings,
   'transfer': Icons.swap_horiz,
+  'split': Icons.call_split,
   'other': Icons.more_horiz,
 };
 

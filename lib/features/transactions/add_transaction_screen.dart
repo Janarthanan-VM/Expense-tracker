@@ -9,6 +9,7 @@ import '../../core/theme/ui.dart';
 import '../../core/utils/formatters.dart';
 import '../categories/category.dart';
 import '../categories/category_picker_sheet.dart';
+import 'split_sheet.dart';
 import 'txn.dart';
 
 Future<void> openTransactionEditor(
@@ -47,6 +48,9 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
   String? _categoryId;
   bool _remember = false;
   late DateTime _time;
+
+  /// Your part of a shared bill; null when the bill is not split.
+  int? _myShare;
   bool _saving = false;
 
   /// Shown under the amount; the field itself is too narrow for an error line.
@@ -65,6 +69,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
     _mode = e?.paymentMode ?? widget.initialMode ?? PaymentMode.cash;
     _categoryId = e?.categoryId;
     _time = e?.txnTime ?? DateTime.now();
+    _myShare = e?.isSplit == true ? e!.mySharePaise : null;
   }
 
   @override
@@ -154,6 +159,13 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
       upiRef: base?.upiRef,
       upiApp: base?.upiApp,
       note: note.isEmpty ? null : note,
+      // A split only applies to money paid, and only while your share is
+      // smaller than the bill.
+      mySharePaise: _type == TxnType.debit &&
+              _myShare != null &&
+              _myShare! < parseRupeesToPaise(_amount.text)!
+          ? _myShare
+          : null,
       txnTime: _time,
       createdAt: base?.createdAt ?? now,
       updatedAt: now,
@@ -324,6 +336,16 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                     ),
                   ),
                 ),
+                if (paid)
+                  _Row(
+                    icon: Icons.call_split,
+                    onTap: _editSplit,
+                    // Rebuilds as the amount is typed.
+                    child: ValueListenableBuilder<TextEditingValue>(
+                      valueListenable: _amount,
+                      builder: (context, value, child) => _splitLabel(t, p),
+                    ),
+                  ),
                 _Row(
                   icon: Icons.event_outlined,
                   onTap: _pickDateTime,
@@ -385,6 +407,32 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                   if (_amountError != null) setState(() => _amountError = null);
                 },
               );
+
+  Widget _splitLabel(TextTheme t, AppPalette p) {
+    final total = parseRupeesToPaise(_amount.text);
+    final share = _myShare;
+    if (share == null || total == null || share >= total) {
+      return Text('Split with friends', style: t.bodyLarge?.copyWith(color: p.faint));
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Your share ${formatPaise(share)}', style: t.bodyLarge),
+        Text('Friends owe you ${formatPaise(total - share)}', style: t.bodySmall),
+      ],
+    );
+  }
+
+  Future<void> _editSplit() async {
+    final total = parseRupeesToPaise(_amount.text);
+    if (total == null) {
+      setState(() => _amountError = 'Enter the amount first, then split it');
+      return;
+    }
+    final result = await showSplitSheet(context, totalPaise: total, currentShare: _myShare);
+    if (result == null) return;
+    setState(() => _myShare = result.mySharePaise);
+  }
 
   Widget _saveBar(BuildContext context) => SafeArea(
         child: Padding(

@@ -2,6 +2,7 @@ import 'package:sqflite_sqlcipher/sqflite.dart';
 
 import '../../core/db/app_database.dart';
 import '../categories/category.dart';
+import '../categories/default_categories.dart';
 import '../transactions/txn.dart';
 import 'backup_codec.dart';
 
@@ -78,6 +79,12 @@ class BackupService {
         }
         await batch.commit(noResult: true);
       }
+      // Older backups may lack newer built-in categories ("Paid back by friends").
+      final defaults = t.batch();
+      for (final c in defaultCategories) {
+        defaults.insert('categories', c.toMap(), conflictAlgorithm: ConflictAlgorithm.ignore);
+      }
+      await defaults.commit(noResult: true);
     });
     return incoming['transactions']!.where((r) => r['deleted_at'] == null).length;
   }
@@ -108,7 +115,7 @@ class BackupService {
     String two(int n) => n.toString().padLeft(2, '0');
     final out = StringBuffer()
       ..writeln([
-        'Date', 'Time', 'Type', 'Amount (INR)', 'Name', 'UPI ID', 'Category',
+        'Date', 'Time', 'Type', 'Amount (INR)', 'Your share (INR)', 'Name', 'UPI ID', 'Category',
         'Paid with', 'Note', 'UPI reference', 'Recorded from', 'Status',
       ].map(cell).join(','));
     final sorted = [...txns]..sort((a, b) => a.txnTime.compareTo(b.txnTime));
@@ -119,6 +126,7 @@ class BackupService {
         '${two(d.hour)}:${two(d.minute)}',
         t.type == TxnType.debit ? 'Money out' : 'Money in',
         (t.amountPaise / 100).toStringAsFixed(2),
+        t.isSplit ? (t.mySharePaise! / 100).toStringAsFixed(2) : '',
         t.payeeName,
         t.payeeVpa,
         categories[t.categoryId]?.name ?? '',

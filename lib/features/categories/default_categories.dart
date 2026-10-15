@@ -2,6 +2,9 @@ import 'category.dart';
 
 /// Seeded on first launch. IDs are fixed so rules and future
 /// auto-categorisation can refer to them.
+/// Category for money friends send back for a split bill.
+const String splitSettlementId = 'split_settlement';
+
 const List<TxnCategory> defaultCategories = [
   // Expense
   TxnCategory(id: 'food', name: 'Food & dining', iconKey: 'restaurant', colorValue: 0xFFE65100, kind: CategoryKind.expense, isDefault: true, sortOrder: 1),
@@ -27,4 +30,6 @@ const List<TxnCategory> defaultCategories = [
 
   // Transfer (not counted as spending or income)
   TxnCategory(id: 'self_transfer', name: 'Own account transfer', iconKey: 'transfer', colorValue: 0xFF546E7A, kind: CategoryKind.transfer, isDefault: true, sortOrder: 1),
+  // A friend paying you back for a split bill: money in, but not income.
+  TxnCategory(id: splitSettlementId, name: 'Paid back by friends', iconKey: 'split', colorValue: 0xFF00897B, kind: CategoryKind.transfer, isDefault: true, sortOrder: 2),
 ];

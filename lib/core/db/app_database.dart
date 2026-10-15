@@ -10,7 +10,7 @@ class AppDatabase {
 
   final Database db;
 
-  static const int schemaVersion = 4;
+  static const int schemaVersion = 5;
   static const String fileName = 'expense_tracker.db';
 
   static Future<AppDatabase> open() async {
@@ -29,6 +29,7 @@ class AppDatabase {
         if (oldVersion < 2) await _migrateToV2(db);
         if (oldVersion < 3) await _migrateToV3(db);
         if (oldVersion < 4) await _migrateToV4(db);
+        if (oldVersion < 5) await _migrateToV5(db);
       },
     );
     return AppDatabase._(db);
@@ -42,6 +43,7 @@ class AppDatabase {
     await _migrateToV3(db);
     await _migrateToV4(db);
     await _seedDefaultCategories(db);
+    await _migrateToV5(db);
   }
 
   static Future<void> _createSchemaV1(Database db) async {
@@ -152,6 +154,17 @@ class AppDatabase {
     await db.execute(
       'CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)',
     );
+  }
+
+  /// v5: split bills. "my_share_paise" is your part of a shared bill, and
+  /// the "Paid back by friends" category marks money friends return.
+  static Future<void> _migrateToV5(Database db) async {
+    final cols = await db.rawQuery('PRAGMA table_info(transactions)');
+    if (!cols.any((c) => c['name'] == 'my_share_paise')) {
+      await db.execute('ALTER TABLE transactions ADD COLUMN my_share_paise INTEGER');
+    }
+    final settlement = defaultCategories.firstWhere((c) => c.id == splitSettlementId);
+    await db.insert('categories', settlement.toMap(), conflictAlgorithm: ConflictAlgorithm.ignore);
   }
 
   /// Opens an already-created database, for tests.

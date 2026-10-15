@@ -37,6 +37,7 @@ class HomeScreen extends ConsumerWidget {
         !detection.smsPermission &&
         !detection.promoDismissed;
     final s = summary.valueOrNull;
+    final owed = ref.watch(owedToYouProvider).valueOrNull ?? 0;
     final month = ref.watch(selectedMonthProvider);
     final now = DateTime.now();
     final isCurrentMonth = month.year == now.year && month.month == now.month;
@@ -70,6 +71,10 @@ class HomeScreen extends ConsumerWidget {
                   padding: const EdgeInsets.fromLTRB(kGutter, 28, kGutter, 0),
                   child: DailyBars(totals: daily, today: isCurrentMonth ? now.day : null),
                 ),
+              if (owed > 0) ...[
+                const SizedBox(height: 24),
+                _OwedRow(owedPaise: owed),
+              ],
               if (pending.isNotEmpty) ...[
                 const SizedBox(height: 24),
                 _AttentionRow(count: pending.length),
@@ -226,6 +231,12 @@ class _Hero extends StatelessWidget {
                 value: formatPaise(kept.abs()),
                 color: kept >= 0 ? p.ink : p.attention,
               ),
+              if ((s?.paidBackPaise ?? 0) > 0)
+                _Stat(
+                  label: 'Paid back',
+                  value: formatPaise(s!.paidBackPaise),
+                  color: p.moneyIn,
+                ),
             ],
           ),
           if (s != null && s.spentByMode.length > 1) ...[
@@ -376,6 +387,51 @@ class _Bar extends StatelessWidget {
     return Container(
       height: h,
       decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(3)),
+    );
+  }
+}
+
+/// What friends still owe you for split bills.
+class _OwedRow extends StatelessWidget {
+  const _OwedRow({required this.owedPaise});
+
+  final int owedPaise;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    final t = Theme.of(context).textTheme;
+    return Group(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+          child: Row(
+            children: [
+              IconTile(icon: Icons.call_split, color: p.moneyIn),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text.rich(TextSpan(children: [
+                      TextSpan(text: 'Friends owe you ', style: t.titleSmall?.copyWith(fontSize: 15)),
+                      TextSpan(
+                        text: formatPaise(owedPaise),
+                        style: t.titleSmall?.copyWith(fontSize: 15, color: p.moneyIn, fontFeatures: kTabular),
+                      ),
+                    ])),
+                    const SizedBox(height: 2),
+                    Text(
+                      'When they pay you back, choose "Paid back by friends" as the category.',
+                      style: t.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

@@ -1,6 +1,14 @@
-# Dripless (Flutter) — v0.6.0
+# Dripless (Flutter) — v0.7.0
 
 This step gives you a working app with:
+
+- **v0.7.0**: split bills (only your share counts as spending; "Paid back by
+  friends" settles what friends owe and is not income; Home shows what friends
+  still owe); payment alerts pop up on screen; Google Pay payments with the
+  same text (two "₹10 paid to Chai Point") are no longer dropped; the
+  notification reader reconnects when Android disconnects it; Recent message
+  checks lists only money messages (last 20) and can show the text of skipped
+  ones (never OTPs) for troubleshooting.
 
 - **v0.6.0**: Scan & Pay (Google's QR scanner, pay with any UPI app, recorded
   straight away and confirmed by the bank SMS); password-encrypted backup and

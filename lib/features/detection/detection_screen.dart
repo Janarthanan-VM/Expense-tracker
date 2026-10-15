@@ -241,6 +241,15 @@ class _DetectionScreenState extends ConsumerState<DetectionScreen> with WidgetsB
                   child: const Text('Allow'),
                 ),
         ),
+        if (s.canNotify && !s.alertsPopUp)
+          _Tip(
+            text: 'Payment alerts are set not to pop up. Turn on "Pop on screen" for '
+                'Payment alerts so you can pick a category the moment you pay.',
+            action: TextButton(
+              onPressed: _service.openAlertSettings,
+              child: const Text('Open alert settings'),
+            ),
+          ),
         const SizedBox(height: 8),
         SwitchListTile(
           value: s.enabled,
@@ -258,8 +267,26 @@ class _DetectionScreenState extends ConsumerState<DetectionScreen> with WidgetsB
             ),
           ],
         ),
+        Text(
+          'Payments recorded, and money messages that were skipped. Other notifications '
+          'are not listed.',
+          style: theme.textTheme.bodySmall,
+        ),
         const SizedBox(height: 4),
         _CheckLog(checks: s.checks, smsAllowed: s.smsPermission),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          value: s.keepSkippedText,
+          onChanged: (v) async {
+            await _service.setKeepSkippedText(v);
+            ref.invalidate(detectionStatusProvider);
+          },
+          title: const Text('Show the text of skipped messages'),
+          subtitle: const Text(
+            'Helps find out why a payment was missed. Kept only on this phone; OTP and PIN '
+            'messages are never kept. Turning it off deletes the text.',
+          ),
+        ),
         const Divider(height: 32),
         Text('Import past bank SMS', style: theme.textTheme.titleMedium),
         const SizedBox(height: 4),
@@ -551,6 +578,16 @@ class _CheckLog extends StatelessWidget {
                         '${c.source}, ${_channel(c.channel)}, ${formatDateTime(c.time)}',
                         style: t.bodySmall,
                       ),
+                      if (c.text != null)
+                        Container(
+                          margin: const EdgeInsets.only(top: 6),
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: scheme.surfaceContainerHighest,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: SelectableText(c.text!, style: t.bodySmall),
+                        ),
                     ],
                   ),
                 ),

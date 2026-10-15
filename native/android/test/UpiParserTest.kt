@@ -348,4 +348,44 @@ class UpiParserTest {
         assertEquals("card", p.mode)
         assertEquals("Amazon", p.payeeName)
     }
+
+    // ------------------------------------------------------------ Google Pay phrasing (v0.7.0)
+
+    @Test fun youPaid() {
+        val p = parse("You paid ₹10 to Ravi Kumar")
+        assertTrue(p.isDebit)
+        assertEquals(1000L, p.amountPaise)
+        assertEquals("Ravi Kumar", p.payeeName)
+    }
+
+    @Test fun paidToBankAccount() {
+        val p = parse("Paid ₹1,000 to Ravi Kumar's bank account")
+        assertTrue(p.isDebit)
+        assertEquals(100000L, p.amountPaise)
+        assertEquals("Ravi Kumar", p.payeeName)
+    }
+
+    @Test fun receivedFrom() {
+        val p = parse("₹200 received from Ravi Kumar")
+        assertFalse(p.isDebit)
+        assertEquals("Ravi Kumar", p.payeeName)
+    }
+
+    @Test fun paymentToWasSuccessful() {
+        val p = parse("Payment to Chai Point of ₹150 was successful")
+        assertTrue(p.isDebit)
+        assertEquals(15000L, p.amountPaise)
+        assertEquals("Chai Point", p.payeeName)
+    }
+
+    @Test fun otpMessagesAreSensitive() {
+        assertTrue(UpiParser.isSensitive("482913 is your OTP for a transaction of Rs 500"))
+        assertTrue(UpiParser.isSensitive("Use UPI PIN only to send money"))
+        assertFalse(UpiParser.isSensitive("A/c *1094 Credited for Rs:1.00. Never Share OTP/PIN/CVV-Union Bank of India"))
+    }
+
+    @Test fun mentionsMoney() {
+        assertTrue(UpiParser.mentionsMoney("Get ₹50 cashback on your next bill"))
+        assertFalse(UpiParser.mentionsMoney("Your weekly rewards are ready"))
+    }
 }

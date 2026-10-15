@@ -136,4 +136,18 @@ void main() {
       expect(lines[2], contains("\"'=HYPERLINK"), reason: 'formulas are not run by spreadsheets');
     });
   });
+
+  test('restoring an older backup keeps the built-in "Paid back by friends" category', () async {
+    final db = await _freshDb();
+    await BackupService(db).restore({
+      'app': 'Dripless',
+      'schemaVersion': 4,
+      'categories': [
+        for (final c in defaultCategories.where((c) => c.id != 'split_settlement')) c.toMap(),
+      ],
+      'transactions': [],
+    });
+    final rows = await db.query('categories', where: 'id = ?', whereArgs: ['split_settlement']);
+    expect(rows, hasLength(1));
+  });
 }

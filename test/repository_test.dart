@@ -232,4 +232,56 @@ void main() {
     expect((await repo.monthSummary(now)).spentPaise, 1000);
     expect((await repo.dailySpend(lastMonth))[9], 4000);
   });
+
+  // ------------------------------------------------------------ split bills (v0.7.0)
+
+  test('a split bill counts only your share as spending', () async {
+    await repo.add(manual('dinner', 100000, payee: 'Restaurant'));
+    await repo.setMyShare('dinner', 25000);
+    final s = await repo.monthSummary(now);
+    expect(s.spentPaise, 25000);
+    expect((await repo.dailySpend(now))[now.day - 1], 25000);
+    expect(await repo.owedToYou(), 75000);
+  });
+
+  test('friends paying back reduces what they owe and is not income', () async {
+    await repo.add(manual('dinner', 100000));
+    await repo.setMyShare('dinner', 25000);
+    final back = manual('ravi', 25000, type: TxnType.credit, payee: 'Ravi');
+    await repo.add(back);
+    await repo.setCategory(back, 'split_settlement');
+
+    final s = await repo.monthSummary(now);
+    expect(s.incomePaise, 0, reason: 'paying back is not income');
+    expect(s.paidBackPaise, 25000);
+    expect(await repo.owedToYou(), 50000);
+  });
+
+  test('owed never goes below zero', () async {
+    final back = manual('extra', 5000, type: TxnType.credit);
+    await repo.add(back);
+    await repo.setCategory(back, 'split_settlement');
+    expect(await repo.owedToYou(), 0);
+  });
+
+  test('removing a split counts the full bill again', () async {
+    await repo.add(manual('cab', 60000));
+    await repo.setMyShare('cab', 20000);
+    await repo.setMyShare('cab', null);
+    expect((await repo.monthSummary(now)).spentPaise, 60000);
+    expect(await repo.owedToYou(), 0);
+  });
+
+  test('a deleted split bill no longer counts as owed', () async {
+    await repo.add(manual('movie', 80000));
+    await repo.setMyShare('movie', 20000);
+    await repo.delete('movie');
+    expect(await repo.owedToYou(), 0);
+  });
+
+  test('"Paid back by friends" is offered for money received', () async {
+    final ids = await repo.topCategoryIds(TxnType.credit, limit: 10);
+    expect(ids, contains('split_settlement'));
+    expect(await repo.topCategoryIds(TxnType.debit, limit: 30), isNot(contains('split_settlement')));
+  });
 }

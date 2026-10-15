@@ -1,5 +1,6 @@
 import 'package:sqflite_sqlcipher/sqflite.dart';
 
+import '../categories/default_categories.dart';
 import '../detection/detected_payment.dart';
 import 'txn.dart';
 
@@ -9,6 +10,12 @@ class TransactionRepository {
   final Database _db;
 
   static const String _notDeleted = 'deleted_at IS NULL';
+
+  /// What a payment adds to spending: your share of a split bill, otherwise
+  /// the full amount.
+  static const String _spendSql =
+      'CASE WHEN t.my_share_paise IS NOT NULL AND t.my_share_paise < t.amount_paise '
+      'THEN t.my_share_paise ELSE t.amount_paise END';
 
   // ---------------------------------------------------------------- payees
 
@@ -385,11 +392,11 @@ class TransactionRepository {
       LEFT JOIN transactions t
         ON t.category_id = c.id AND t.deleted_at IS NULL
        AND t.txn_time >= ? AND t.type = ?
-      WHERE c.kind = ? AND c.is_hidden = 0
+      WHERE (c.kind = ? OR (? = 'credit' AND c.id = '$splitSettlementId')) AND c.is_hidden = 0
       GROUP BY c.id
       ORDER BY COUNT(t.id) DESC, c.sort_order, c.name
       LIMIT ?
-    ''', [since, type.name, kind, limit]);
+    ''', [since, type.name, kind, type.name, limit]);
     return rows.map((r) => r['id']! as String).toList();
   }
 
@@ -473,7 +480,7 @@ class TransactionRepository {
     final end = DateTime(anyDayInMonth.year, anyDayInMonth.month + 1);
     final days = end.difference(start).inDays;
     final rows = await _db.rawQuery('''
-      SELECT t.txn_time AS at, t.amount_paise AS amount
+      SELECT t.txn_time AS at, $_spendSql AS amount
       FROM transactions t
       LEFT JOIN categories c ON c.id = t.category_id
       WHERE t.deleted_at IS NULL AND t.status = 'success' AND t.type = 'debit'
@@ -496,7 +503,7 @@ class TransactionRepository {
 
     // Uncategorized payments count as spending; transfers do not.
     final spentRows = await _db.rawQuery('''
-      SELECT t.category_id AS category_id, SUM(t.amount_paise) AS total
+      SELECT t.category_id AS category_id, SUM($_spendSql) AS total
       FROM transactions t
       LEFT JOIN categories c ON c.id = t.category_id
       WHERE t.deleted_at IS NULL AND t.status = 'success' AND t.type = 'debit'
@@ -515,8 +522,16 @@ class TransactionRepository {
         AND (c.kind IS NULL OR c.kind = 'income')
     ''', range);
 
+    final paidBackRows = await _db.rawQuery('''
+      SELECT COALESCE(SUM(t.amount_paise), 0) AS total
+      FROM transactions t
+      WHERE t.deleted_at IS NULL AND t.status = 'success' AND t.type = 'credit'
+        AND t.category_id = '$splitSettlementId'
+        AND t.txn_time >= ? AND t.txn_time < ?
+    ''', range);
+
     final modeRows = await _db.rawQuery('''
-      SELECT t.payment_mode AS mode, SUM(t.amount_paise) AS total
+      SELECT t.payment_mode AS mode, SUM($_spendSql) AS total
       FROM transactions t
       LEFT JOIN categories c ON c.id = t.category_id
       WHERE t.deleted_at IS NULL AND t.status = 'success' AND t.type = 'debit'
@@ -546,6 +561,32 @@ class TransactionRepository {
       incomePaise: (incomeRows.first['total'] as int?) ?? 0,
       byCategory: byCategory,
       spentByMode: spentByMode,
+      paidBackPaise: (paidBackRows.first['total'] as int?) ?? 0,
     );
   }
+
+  /// What friends still owe you across all split bills: the parts of shared
+  /// bills that were not yours, minus what they have paid back. Never below 0.
+  Future<int> owedToYou() async {
+    final rows = await _db.rawQuery('''
+      SELECT
+        COALESCE((SELECT SUM(amount_paise - my_share_paise) FROM transactions
+          WHERE deleted_at IS NULL AND status = 'success' AND type = 'debit'
+            AND my_share_paise IS NOT NULL AND my_share_paise < amount_paise), 0) AS owed,
+        COALESCE((SELECT SUM(amount_paise) FROM transactions
+          WHERE deleted_at IS NULL AND status = 'success' AND type = 'credit'
+            AND category_id = '$splitSettlementId'), 0) AS repaid
+    ''');
+    final owed = (rows.first['owed'] as int?) ?? 0;
+    final repaid = (rows.first['repaid'] as int?) ?? 0;
+    return owed - repaid > 0 ? owed - repaid : 0;
+  }
+
+  /// Marks a bill as shared: [mySharePaise] is your part. Null removes the split.
+  Future<void> setMyShare(String id, int? mySharePaise) => _db.update(
+        'transactions',
+        {'my_share_paise': mySharePaise, 'updated_at': DateTime.now().millisecondsSinceEpoch},
+        where: 'id = ?',
+        whereArgs: [id],
+      );
 }
