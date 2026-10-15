@@ -234,4 +234,49 @@ class UpiParserTest {
         assertTrue(p.isDebit)
         assertEquals(200000L, p.amountPaise)
     }
+
+    // ------------------------------------------------------------ Union Bank (real formats, v0.5.2)
+
+    @Test fun unionBankDebitWithColonAmountAndFavouring() {
+        val p = parse(
+            "Union Bank of India A/c *1094 Debited Rs:1.00 on 15-10-2026 08:40:24 by Mob Bk ref no " +
+                "131306780290, Fvg: V SABARE Avl Bal Rs:1047.49. Not you?Call 18002333/SMS BLOCK 1094 to 8879365472",
+            strict = true,
+        )
+        assertEquals(100L, p.amountPaise)
+        assertTrue(p.isDebit)
+        assertEquals("V Sabare", p.payeeName)
+        assertEquals("131306780290", p.upiRef)
+        assertEquals("1094", p.account)
+    }
+
+    @Test fun unionBankCreditWithOtpSafetyFooter() {
+        val p = parse(
+            "A/c *1094 Credited for Rs:1.00 on 15-10-2026 08:42:02 by Mob Bk ref no 665472310076 " +
+                "Avl Bal Rs:1048.49.Never Share OTP/PIN/CVV-Union Bank of India",
+            strict = true,
+        )
+        assertEquals(100L, p.amountPaise)
+        assertFalse(p.isDebit)
+        assertNull(p.payeeName)
+        assertEquals("665472310076", p.upiRef)
+        assertEquals("1094", p.account)
+    }
+
+    @Test fun doNotShareFooterIsNotAnOtpMessage() {
+        val p = parse(
+            "Rs 450.00 debited from A/c XX7788 to VPA shop@okaxis UPI Ref 428600001111. Do not share your OTP with anyone.",
+            strict = true,
+        )
+        assertEquals(45000L, p.amountPaise)
+        assertTrue(p.isDebit)
+    }
+
+    @Test fun realOtpMessageIsStillIgnored() {
+        assertNull(UpiParser.parse("482913 is the OTP for your transaction of Rs:2,000.00 on A/c *1094", strict = true))
+    }
+
+    @Test fun inrWithColon() {
+        assertEquals(125000L, parse("INR:1,250.00 debited from A/c XX12 via UPI Ref 428611110000", strict = true).amountPaise)
+    }
 }

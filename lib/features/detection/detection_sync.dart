@@ -4,6 +4,7 @@ import '../categories/category.dart';
 import '../categories/category_repository.dart';
 import '../transactions/transaction_repository.dart';
 import '../transactions/txn.dart';
+import 'detected_payment.dart';
 import 'detection_service.dart';
 
 /// Moves payments queued by the Android listener into the encrypted database
@@ -47,8 +48,20 @@ class DetectionSync {
       final validIds = {for (final c in categories) c.id};
       final ordered = [...events]
         ..sort((a, b) => (a.time ?? DateTime(0)).compareTo(b.time ?? DateTime(0)));
+      final failed = <DetectedPayment>[];
+      Object? firstError;
       for (final e in ordered) {
-        if (await _txns.upsertDetected(e, validIds)) changed = true;
+        try {
+          if (await _txns.upsertDetected(e, validIds)) changed = true;
+        } catch (error) {
+          failed.add(e);
+          firstError ??= error;
+        }
+      }
+      if (failed.isNotEmpty) {
+        // Keep them for the next try and make the problem visible.
+        await _service.requeueEvents(failed);
+        await _service.reportSaveError('$firstError');
       }
     }
 

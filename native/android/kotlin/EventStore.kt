@@ -155,6 +155,7 @@ class EventStore(context: Context) {
         time: Long,
         amountPaise: Long? = null,
         isDebit: Boolean? = null,
+        message: String? = null,
     ) {
         val log = readArray(KEY_LOG)
         val entry = JSONObject()
@@ -164,6 +165,7 @@ class EventStore(context: Context) {
             .put("time", time)
         amountPaise?.let { entry.put("amountPaise", it) }
         isDebit?.let { entry.put("isDebit", it) }
+        message?.let { entry.put("message", it) }
         val kept = JSONArray().put(entry)
         for (i in 0 until minOf(log.length(), LOG_SIZE - 1)) kept.put(log.get(i))
         prefs.edit().putString(KEY_LOG, kept.toString()).apply()

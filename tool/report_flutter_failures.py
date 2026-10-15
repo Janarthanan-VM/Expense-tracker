@@ -28,6 +28,9 @@ for line in open(path, encoding="utf-8", errors="replace"):
         prints.setdefault(event.get("testID"), []).append(event.get("message", ""))
     elif kind == "error":
         failures.append(event)
+    elif kind == "testDone" and not event.get("hidden"):
+        results = globals().setdefault("RESULTS", {"success": 0, "failure": 0, "error": 0})
+        results[event.get("result", "error")] = results.get(event.get("result", "error"), 0) + 1
 
 
 def exception_text(test_id):
@@ -55,4 +58,6 @@ for event in failures:
     print(f"::error title={title}::{body}")
     reported += 1
 
+r = globals().get("RESULTS", {})
+print(f"::notice title={title}::{r.get('success', 0)} passed, {r.get('failure', 0) + r.get('error', 0)} failed")
 print(f"{reported} distinct failure(s) reported")

@@ -61,9 +61,10 @@ class MessageCheck {
     required this.time,
     this.amountPaise,
     this.isDebit,
+    this.message,
   });
 
-  /// "sms", "sms_notification" or "app_notification".
+  /// "sms", "sms_notification", "app_notification" or "app".
   final String channel;
 
   /// Bank sender ("HDFCBK ••1234"), app name, or "Phone number".
@@ -74,6 +75,9 @@ class MessageCheck {
   final DateTime time;
   final int? amountPaise;
   final bool? isDebit;
+
+  /// Error text for "save_failed".
+  final String? message;
 
   static List<MessageCheck> parseList(Object? raw) {
     if (raw is! String || raw.isEmpty) return const [];
@@ -89,6 +93,7 @@ class MessageCheck {
               time: DateTime.fromMillisecondsSinceEpoch((item['time'] as num?)?.toInt() ?? 0),
               amountPaise: (item['amountPaise'] as num?)?.toInt(),
               isDebit: item['isDebit'] as bool?,
+              message: item['message'] as String?,
             ),
       ];
     } on FormatException {
@@ -210,6 +215,14 @@ class DetectionService {
       return const [];
     }
   }
+
+  /// Puts payments back in the queue after they could not be saved, so they
+  /// are tried again next time instead of being lost.
+  Future<void> requeueEvents(List<DetectedPayment> events) =>
+      _call('requeueEvents', jsonEncode([for (final e in events) e.toJson()]));
+
+  /// Adds a line to "Recent message checks" when saving into the app failed.
+  Future<void> reportSaveError(String message) => _call('reportSaveError', message);
 
   /// Id of the payment whose notification the user tapped, if any.
   Future<String?> consumeOpenRequest() async {

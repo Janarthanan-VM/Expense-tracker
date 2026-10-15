@@ -24,18 +24,22 @@ class AppDatabase {
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
-      onCreate: (db, version) async {
-        await _createSchemaV1(db);
-        await _migrateToV2(db);
-        await _migrateToV3(db);
-        await _seedDefaultCategories(db);
-      },
+      onCreate: (db, version) => createSchema(db),
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) await _migrateToV2(db);
         if (oldVersion < 3) await _migrateToV3(db);
       },
     );
     return AppDatabase._(db);
+  }
+
+  /// Creates every table at the latest version and adds default categories.
+  /// Public so tests can build the same schema on a plain SQLite database.
+  static Future<void> createSchema(Database db) async {
+    await _createSchemaV1(db);
+    await _migrateToV2(db);
+    await _migrateToV3(db);
+    await _seedDefaultCategories(db);
   }
 
   static Future<void> _createSchemaV1(Database db) async {

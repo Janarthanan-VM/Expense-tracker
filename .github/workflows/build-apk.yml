@@ -79,6 +79,22 @@ jobs:
         if: always()
         run: python3 tool/report_junit.py app gradle-test.log
 
+      - name: Database tests (detected payments)
+        id: dbtests
+        continue-on-error: true
+        working-directory: app
+        run: |
+          flutter pub add --dev sqflite_common_ffi
+          mkdir -p test_db
+          cp ../dbtest/*.dart test_db/
+          set +e
+          flutter test test_db --reporter json > ../dbtests.json
+          code=$?
+          set -e
+          python3 ../tool/report_flutter_failures.py ../dbtests.json "Database tests"
+          grep -o '"type":"done","success":[a-z]*' ../dbtests.json || true
+          exit $code
+
       - name: Screenshots (design review)
         id: screens
         continue-on-error: true

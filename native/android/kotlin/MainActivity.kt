@@ -100,6 +100,21 @@ class MainActivity : FlutterActivity() {
                 "requestSmsPermission" -> requestSmsPermission(result)
                 "importSmsHistory" -> importSmsHistory(call, result)
                 "takeEvents" -> result.success(store.takeAll())
+                "requeueEvents" -> {
+                    val arr = org.json.JSONArray(call.arguments as? String ?: "[]")
+                    for (i in 0 until arr.length()) store.upsert(arr.getJSONObject(i))
+                    result.success(null)
+                }
+                "reportSaveError" -> {
+                    store.recordCheck(
+                        channel = "app",
+                        source = "Dripless",
+                        outcome = "save_failed",
+                        time = System.currentTimeMillis(),
+                        message = (call.arguments as? String)?.take(300),
+                    )
+                    result.success(null)
+                }
                 "consumeOpenRequest" -> result.success(store.consumeOpenRequest())
                 "setCategoryHints" -> {
                     store.setHints(call.arguments as? String ?: "{}")

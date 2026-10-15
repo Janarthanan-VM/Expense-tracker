@@ -247,23 +247,29 @@ class TransactionRepository {
     final time = (e.time ?? DateTime.now()).millisecondsSinceEpoch;
     const window = 5 * 60 * 1000;
     final source = e.source == 'sms' ? TxnSource.sms.name : TxnSource.notification.name;
+    // Built without null arguments: some SQLite bindings reject them.
+    final where = StringBuffer(includeDeleted ? '1 = 1' : _notDeleted)
+      ..write(' AND amount_paise = ? AND type = ? AND txn_time BETWEEN ? AND ?')
+      ..write(" AND (source != 'manual' OR payment_mode = ?)");
+    final args = <Object>[
+      e.amountPaise!,
+      e.isDebit! ? TxnType.debit.name : TxnType.credit.name,
+      time - window,
+      time + window,
+      e.mode ?? PaymentMode.upi.name,
+    ];
+    if (e.upiRef != null) {
+      where.write(' AND (upi_ref IS NULL OR upi_ref = ?)');
+      args.add(e.upiRef!);
+    }
+    if (!includeDeleted) {
+      where.write(' AND source != ?');
+      args.add(source);
+    }
     final rows = await _db.query(
       'transactions',
-      where: '${includeDeleted ? '1 = 1' : _notDeleted} AND amount_paise = ? AND type = ? '
-          'AND txn_time BETWEEN ? AND ? '
-          "AND (source != 'manual' OR payment_mode = ?) "
-          'AND (upi_ref IS NULL OR ? IS NULL OR upi_ref = ?)'
-          '${includeDeleted ? '' : ' AND source != ?'}',
-      whereArgs: [
-        e.amountPaise,
-        e.isDebit! ? TxnType.debit.name : TxnType.credit.name,
-        time - window,
-        time + window,
-        e.mode ?? PaymentMode.upi.name,
-        e.upiRef,
-        e.upiRef,
-        if (!includeDeleted) source,
-      ],
+      where: where.toString(),
+      whereArgs: args,
       orderBy: 'ABS(txn_time - $time)',
       limit: 1,
     );

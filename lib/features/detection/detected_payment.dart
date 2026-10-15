@@ -44,6 +44,22 @@ class DetectedPayment {
 
   bool get hasPayment => amountPaise != null && amountPaise! > 0 && isDebit != null;
 
+  /// Same shape the Android side queues, so a failed item can be put back.
+  Map<String, Object?> toJson() => {
+        'id': id,
+        if (amountPaise != null) 'amountPaise': amountPaise,
+        if (isDebit != null) 'isDebit': isDebit,
+        if (mode != null) 'mode': mode,
+        if (source != null) 'source': source,
+        if (app != null) 'app': app,
+        if (time != null) 'time': time!.millisecondsSinceEpoch,
+        if (payeeName != null) 'payeeName': payeeName,
+        if (payeeVpa != null) 'payeeVpa': payeeVpa,
+        if (upiRef != null) 'upiRef': upiRef,
+        if (account != null) 'account': account,
+        if (categoryId != null) 'categoryId': categoryId,
+      };
+
   static String? _str(Object? v) {
     if (v is! String) return null;
     final t = v.trim();

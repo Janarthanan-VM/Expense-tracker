@@ -494,6 +494,7 @@ class _CheckLog extends StatelessWidget {
       'not_payment' => 'Not a completed payment, skipped',
       'not_bank' => 'From a personal number, not read',
       'paused' => 'Recording is paused',
+      'save_failed' => 'Could not save into the app, will retry: ${c.message ?? ''}',
       _ => c.outcome,
     };
   }
@@ -502,6 +503,7 @@ class _CheckLog extends StatelessWidget {
         'sms' => 'SMS',
         'sms_notification' => 'SMS notification',
         'app_notification' => 'App notification',
+        'app' => 'Dripless',
         _ => channel,
       };
 

@@ -27,20 +27,31 @@ object UpiParser {
 
     private val IC = setOf(RegexOption.IGNORE_CASE)
 
+    /**
+     * Safety footers such as "Never share OTP/PIN/CVV" or "Do not share your
+     * OTP with anyone" are removed before the checks below, so a payment SMS
+     * that merely warns about OTPs is not mistaken for an OTP message.
+     */
+    private val SAFETY_FOOTER = Regex(
+        """\b(?:never|do\s*n[o']?t|pls\s+do\s+not|please\s+do\s+not)\s+share\b[^.\n]*""",
+        IC,
+    )
+
     /** Not a completed payment: OTPs, requests, failures, reminders, offers. */
     private val IGNORE = Regex(
         """\b(otp|one time password|verification code|requested|requesting|request|collect|failed|failure|declined|unsuccessful|cancelled|canceled|insufficient|pending|reversed|reminder|is due|due on|due date|will be debited|to be debited|scheduled|win|offer|cashback up ?to|get up ?to)\b""",
         IC,
     )
 
+    /** "Rs.250", "Rs 250", "Rs:1.00" (Union Bank), "INR 1,200", "₹99". */
     private val CURRENCY_AMOUNT = Regex(
-        """(?:₹|\bRs\.?|\bINR)\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)""",
+        """(?:₹|\bRs\.?|\bINR)\s*[:.]?\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)""",
         IC,
     )
 
     /** SBI style: "debited by 120.0", "credited by 500". */
     private val WORD_AMOUNT = Regex(
-        """\b(?:debited|credited)\s+(?:by|for|with)\s+(?:₹|Rs\.?|INR)?\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)""",
+        """\b(?:debited|credited)\s+(?:by|for|with)\s+(?:₹|Rs\.?|INR)?\s*[:.]?\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)""",
         IC,
     )
 
@@ -71,13 +82,16 @@ object UpiParser {
     private const val NAME_END =
         """(?=\s+(?:on|via|from|ref|refno|upi|using|for|at|is|was|has|of|by|not|avl|info|in|with|and|dated|thru|through)\b|\s*[.,;:!(|]|\s+-|\s*$)"""
 
+    /** Union Bank and others: "Fvg: V SABARE", "favouring ACME LTD". */
+    private val FAVOURING_NAME = Regex("""\b(?:fvg|favou?ring|in\s+favou?r\s+of)\s*[:.-]?\s*$NAME$NAME_END""", IC)
+
     private val TO_NAME = Regex("""\b(?:trf\s+to|to|at)\s+(?:vpa\s+)?$NAME$NAME_END""", IC)
     private val FROM_NAME = Regex("""\b(?:from|by)\s+(?:vpa\s+)?$NAME$NAME_END""", IC)
     private val NAME_PAID_YOU = Regex("""([A-Z][A-Za-z .'&-]{1,40}?)\s+(?:paid|sent)\s+you\b""")
     private val NAME_CREDITED = Regex(""";\s*([A-Za-z0-9][A-Za-z0-9 &._-]{1,40}?)\s+credited\b""", IC)
 
     private val NOT_A_NAME = Regex(
-        """^(your|you|a/c|ac|acct|account|xx|x+[0-9]|\*|the|bank|upi|card|my|me|vpa|mobile|number|linked|self)\b""",
+        """^(your|you|a/c|ac|acct|account|xx|x+[0-9]|\*|the|bank|upi|card|my|me|vpa|mobile|mob|number|linked|self|net\s*banking|internet|neft|imps|rtgs|atm|cash|cheque|chq)\b""",
         IC,
     )
 
@@ -95,7 +109,7 @@ object UpiParser {
      *   wording so chats such as "I paid Rs 200 to the auto" are ignored.
      */
     fun parse(raw: String, strict: Boolean = false): ParsedPayment? {
-        val text = raw.replace(Regex("""\s+"""), " ").trim()
+        val text = raw.replace(Regex("""\s+"""), " ").replace(SAFETY_FOOTER, " ").trim()
         if (text.isEmpty()) return null
         if (IGNORE.containsMatchIn(text)) return null
         if (strict && !BANK_CUES.containsMatchIn(text)) return null
@@ -157,6 +171,7 @@ object UpiParser {
             NAME_PAID_YOU.find(text)?.let { m -> accept(m.groupValues[1])?.let { return it } }
             for (m in FROM_NAME.findAll(text)) accept(m.groupValues[1])?.let { return it }
         } else {
+            FAVOURING_NAME.find(text)?.let { m -> accept(m.groupValues[1])?.let { return it } }
             for (m in TO_NAME.findAll(text)) accept(m.groupValues[1])?.let { return it }
             NAME_CREDITED.find(text)?.let { m -> accept(m.groupValues[1])?.let { return it } }
         }
