@@ -142,6 +142,8 @@ void main() {
     await tester.tap(find.byTooltip('Delete'));
     await settle(tester);
     expect(await repo.list(), isEmpty);
+    // Let the edit screen finish closing before touching the snackbar.
+    await settle(tester);
     expect(find.text('Transaction deleted'), findsOneWidget);
 
     final undo = find.widgetWithText(SnackBarAction, 'Undo');
