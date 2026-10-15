@@ -71,6 +71,7 @@ void main() {
     expect(saved.single.payeeName, 'Tea shop');
     expect(saved.single.type, TxnType.debit);
     expect(saved.single.paymentMode, PaymentMode.cash);
+    await settle(tester);
     expect(find.text('New expense'), findsNothing, reason: 'back on Home');
     expect(find.text('₹120'), findsWidgets);
   });
@@ -143,9 +144,13 @@ void main() {
     expect(await repo.list(), isEmpty);
     expect(find.text('Transaction deleted'), findsOneWidget);
 
-    await tester.tap(find.text('Undo'));
+    final undo = find.widgetWithText(SnackBarAction, 'Undo');
+    expect(undo, findsOneWidget, reason: 'one visible Undo button');
+    await tester.tap(undo);
     await settle(tester);
-    expect(await repo.list(), hasLength(1));
+    expect(find.text('Transaction deleted'), findsNothing, reason: 'the snackbar closes when Undo is pressed');
+    await settle(tester);
+    expect(await repo.list(), hasLength(1), reason: 'Undo brings the payment back');
   });
 
   testWidgets('search finds a payment by amount; Money in filter hides spending', (tester) async {

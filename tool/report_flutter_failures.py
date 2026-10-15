@@ -36,7 +36,12 @@ for line in open(path, encoding="utf-8", errors="replace"):
 def exception_text(test_id):
     """First 'EXCEPTION CAUGHT' block printed by this test, trimmed."""
     text = "\n".join(prints.get(test_id, []))
-    start = text.find("EXCEPTION CAUGHT")
+    warning = next((l for l in text.splitlines() if "Warning: A call to" in l), "")
+    if warning:
+        text = text.replace("EXCEPTION CAUGHT", warning + "\nEXCEPTION CAUGHT", 1)
+    start = text.find("Warning: A call to") if warning else -1
+    if start < 0:
+        start = text.find("EXCEPTION CAUGHT")
     if start < 0:
         return text[:1500]
     block = text[start:]
