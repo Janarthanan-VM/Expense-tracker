@@ -671,32 +671,9 @@ class _FirstRun extends StatelessWidget {
     final t = Theme.of(context).textTheme;
     return Padding(
       padding: const EdgeInsets.fromLTRB(kGutter, 4, kGutter, 0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Nothing yet. Add a cash or UPI expense by hand, scan a QR to pay, or turn on '
-            'automatic recording in Settings.',
-            style: t.bodyMedium?.copyWith(color: context.palette.muted),
-          ),
-          const SizedBox(height: 14),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              FilledButton.icon(
-                onPressed: () => openTransactionEditor(context),
-                icon: const Icon(Icons.add, size: 18),
-                label: const Text('Add expense'),
-              ),
-              OutlinedButton.icon(
-                onPressed: () => openScanPay(context),
-                icon: const Icon(Icons.qr_code_scanner, size: 18),
-                label: const Text('Scan & Pay'),
-              ),
-            ],
-          ),
-        ],
+      child: Text(
+        'No payments yet. They will show up here.',
+        style: t.bodyMedium?.copyWith(color: context.palette.muted),
       ),
     );
   }
