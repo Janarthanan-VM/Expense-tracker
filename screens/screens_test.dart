@@ -144,7 +144,10 @@ void main() {
   setUpAll(() async {
     await _loadFonts();
     sqfliteFfiInit();
-    _db = await databaseFactoryFfiNoIsolate.openDatabase(inMemoryDatabasePath);
+    _db = await databaseFactoryFfiNoIsolate.openDatabase(
+      inMemoryDatabasePath,
+      options: OpenDatabaseOptions(singleInstance: false),
+    );
     await AppDatabase.createSchema(_db);
   });
 

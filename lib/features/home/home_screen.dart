@@ -140,18 +140,31 @@ class _MonthBar extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(kGutter - 12, 8, kGutter - 4, 0),
       child: Row(
         children: [
-          IconButton(
-            tooltip: 'Previous month',
-            onPressed: onPrevious,
-            icon: Icon(Icons.chevron_left, color: p.muted),
+          Expanded(
+            child: Row(
+              children: [
+                IconButton(
+                  tooltip: 'Previous month',
+                  onPressed: onPrevious,
+                  icon: Icon(Icons.chevron_left, color: p.muted),
+                ),
+                Flexible(
+                  child: Text(
+                    formatMonth(month),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: t.titleSmall?.copyWith(color: p.muted),
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Next month',
+                  onPressed: onNext,
+                  icon: Icon(Icons.chevron_right, color: onNext == null ? p.line : p.muted),
+                ),
+              ],
+            ),
           ),
-          Text(formatMonth(month), style: t.titleSmall?.copyWith(color: p.muted)),
-          IconButton(
-            tooltip: 'Next month',
-            onPressed: onNext,
-            icon: Icon(Icons.chevron_right, color: onNext == null ? p.line : p.muted),
-          ),
-          const Spacer(),
+          const SizedBox(width: 8),
           OutlinedButton.icon(
             onPressed: onScan,
             icon: const Icon(Icons.qr_code_scanner, size: 18),

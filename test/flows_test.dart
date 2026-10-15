@@ -19,7 +19,10 @@ void main() {
   late TransactionRepository repo;
 
   setUp(() async {
-    db = await databaseFactoryFfiNoIsolate.openDatabase(inMemoryDatabasePath);
+    db = await databaseFactoryFfiNoIsolate.openDatabase(
+      inMemoryDatabasePath,
+      options: OpenDatabaseOptions(singleInstance: false),
+    );
     await db.execute('PRAGMA foreign_keys = ON');
     await AppDatabase.createSchema(db);
     repo = TransactionRepository(db);

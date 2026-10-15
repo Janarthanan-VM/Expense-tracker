@@ -12,7 +12,10 @@ import 'package:expense_tracker/features/transactions/transaction_repository.dar
 import 'package:expense_tracker/features/transactions/txn.dart';
 
 Future<Database> _freshDb() async {
-  final db = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
+  final db = await databaseFactoryFfi.openDatabase(
+      inMemoryDatabasePath,
+      options: OpenDatabaseOptions(singleInstance: false),
+    );
   await db.execute('PRAGMA foreign_keys = ON');
   await AppDatabase.createSchema(db);
   return db;

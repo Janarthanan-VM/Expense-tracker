@@ -17,7 +17,10 @@ void main() {
   final now = DateTime.now();
 
   setUp(() async {
-    db = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
+    db = await databaseFactoryFfi.openDatabase(
+      inMemoryDatabasePath,
+      options: OpenDatabaseOptions(singleInstance: false),
+    );
     await db.execute('PRAGMA foreign_keys = ON');
     await AppDatabase.createSchema(db);
     repo = TransactionRepository(db);
