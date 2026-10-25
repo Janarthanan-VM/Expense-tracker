@@ -42,6 +42,10 @@ final recentTxnsProvider =
 final toCategorizeProvider =
     FutureProvider<List<Txn>>((ref) => ref.watch(txnRepoProvider).toCategorize());
 
+/// Payments that look like the same payment recorded more than once.
+final duplicatesProvider =
+    FutureProvider<List<List<Txn>>>((ref) => ref.watch(txnRepoProvider).duplicateGroups());
+
 /// The month shown on Home (first day of that month). Starts at this month.
 final selectedMonthProvider = StateProvider<DateTime>((ref) {
   final now = DateTime.now();
@@ -105,6 +109,7 @@ void invalidateData(void Function(ProviderOrFamily provider) invalidate) {
     categoriesProvider,
     recentTxnsProvider,
     toCategorizeProvider,
+    duplicatesProvider,
     monthSummaryProvider,
     dailySpendProvider,
     payeeRulesProvider,

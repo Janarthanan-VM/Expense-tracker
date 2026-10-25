@@ -11,6 +11,7 @@ import '../categories/category.dart';
 import '../detection/detection_screen.dart';
 import '../transactions/add_transaction_screen.dart';
 import '../transactions/categorize_action.dart';
+import '../transactions/duplicates_screen.dart';
 import '../transactions/payment_mode_ui.dart';
 import '../transactions/to_categorize_screen.dart';
 import '../transactions/transaction_tile.dart';
@@ -27,6 +28,7 @@ class HomeScreen extends ConsumerWidget {
     final summary = ref.watch(monthSummaryProvider);
     final daily = ref.watch(dailySpendProvider).valueOrNull;
     final pending = ref.watch(toCategorizeProvider).valueOrNull ?? const <Txn>[];
+    final duplicates = ref.watch(duplicatesProvider).valueOrNull ?? const <List<Txn>>[];
     final recent = ref.watch(recentTxnsProvider);
     final categories = ref.watch(categoryMapProvider);
     final detection = ref.watch(detectionStatusProvider).valueOrNull;
@@ -76,6 +78,10 @@ class HomeScreen extends ConsumerWidget {
               if (pending.isNotEmpty) ...[
                 const SizedBox(height: 24),
                 _AttentionRow(count: pending.length),
+              ],
+              if (duplicates.isNotEmpty) ...[
+                SizedBox(height: pending.isNotEmpty ? 12 : 24),
+                _DuplicatesRow(count: duplicates.length),
               ],
               if (showDetectionPromo) ...[
                 const SizedBox(height: 12),
@@ -459,6 +465,39 @@ class _AttentionRow extends StatelessWidget {
           onTap: () => Navigator.of(context).push(
             MaterialPageRoute(builder: (_) => const ToCategorizeScreen()),
           ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Shown when some payments look recorded twice.
+class _DuplicatesRow extends StatelessWidget {
+  const _DuplicatesRow({required this.count});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    return Group(
+      children: [
+        ListTile(
+          minVerticalPadding: 14,
+          leading: Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: p.sunken,
+              borderRadius: BorderRadius.circular(AppTheme.tileRadius),
+            ),
+            alignment: Alignment.center,
+            child: Icon(Icons.copy_all_outlined, color: p.ink, size: 20),
+          ),
+          title: Text(count == 1 ? '1 possible duplicate' : '$count possible duplicates'),
+          subtitle: const Text('Same payment recorded twice? Delete the extra'),
+          trailing: Icon(Icons.chevron_right, color: p.muted),
+          onTap: () => openDuplicates(context),
         ),
       ],
     );

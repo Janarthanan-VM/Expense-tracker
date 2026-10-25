@@ -340,4 +340,42 @@ void main() {
     expect(flow.last.inPaise, 100000);
     expect(flow[4].outPaise, 5000);
   });
+
+  test('the same payment recorded twice is found as a duplicate', () async {
+    await repo.add(manual('a', 12490, payee: 'Sri Krishna Stores'));
+    await repo.add(manual('b', 12490, at: now.add(const Duration(minutes: 3))));
+    await repo.add(manual('c', 5000, at: now.add(const Duration(minutes: 1))));
+    final groups = await repo.duplicateGroups();
+    expect(groups, hasLength(1));
+    expect(groups.single.map((t) => t.id), unorderedEquals(['a', 'b']));
+  });
+
+  test('payments far apart, or with different bank references, are not duplicates', () async {
+    await repo.add(manual('a', 2000));
+    await repo.add(manual('b', 2000, at: now.add(const Duration(minutes: 30))));
+    await repo.upsertDetected(payment('s1', source: 'sms', debit: true, ref: '111111111111', paise: 900), validIds);
+    await repo.upsertDetected(
+      payment('s2', source: 'sms', debit: true, ref: '222222222222', paise: 900, at: now.add(const Duration(minutes: 1))),
+      validIds,
+    );
+    expect(await repo.duplicateGroups(), isEmpty);
+  });
+
+  test('the duplicate with a category is kept, and "Not duplicates" is remembered', () async {
+    await repo.add(manual('a', 3000));
+    await repo.add(manual('b', 3000, at: now.add(const Duration(minutes: 2))));
+    await repo.setCategory((await repo.byId('b'))!, 'food');
+    var groups = await repo.duplicateGroups();
+    expect(TransactionRepository.keeperOf(groups.single).id, 'b');
+
+    await repo.ignoreDuplicates(groups.single);
+    expect(await repo.duplicateGroups(), isEmpty);
+
+    await repo.add(manual('c', 4000));
+    await repo.add(manual('d', 4000, at: now.add(const Duration(minutes: 1))));
+    groups = await repo.duplicateGroups();
+    expect(groups.single.map((t) => t.id), unorderedEquals(['c', 'd']));
+    await repo.delete('d');
+    expect(await repo.duplicateGroups(), isEmpty);
+  });
 }

@@ -291,4 +291,51 @@ void main() {
     expect(find.text('Where your money came from'), findsOneWidget);
     expect(find.text('Salary'), findsWidgets);
   });
+
+  Txn detected(String id, int paise, DateTime at) => Txn(
+        id: id,
+        amountPaise: paise,
+        type: TxnType.debit,
+        status: TxnStatus.success,
+        source: TxnSource.sms,
+        paymentMode: PaymentMode.upi,
+        txnTime: at,
+        createdAt: at,
+        updatedAt: at,
+        payeeName: 'Chai Point',
+      );
+
+  testWidgets('a payment without a category can be deleted from the picker', (tester) async {
+    await repo.add(detected('d1', 18000, DateTime.now()));
+    await start(tester);
+    await tester.ensureVisible(find.text('Payment needs a category'));
+    await settle(tester);
+    await tester.tap(find.text('Payment needs a category'));
+    await settle(tester);
+    await tester.tap(find.text('Chai Point'));
+    await settle(tester);
+    await tester.tap(find.text('Delete this payment (duplicate or not mine)'));
+    await settle(tester);
+    expect(await repo.list(), isEmpty);
+    expect(find.text('Payment deleted'), findsOneWidget);
+    expect(find.text('All caught up'), findsOneWidget);
+  });
+
+  testWidgets('duplicates: delete the extra one in one tap', (tester) async {
+    final now = DateTime.now();
+    await repo.add(detected('d1', 18000, now));
+    await repo.add(detected('d2', 18000, now.add(const Duration(minutes: 2))));
+    await start(tester);
+    expect(find.text('1 possible duplicate'), findsOneWidget);
+    await tester.ensureVisible(find.text('1 possible duplicate'));
+    await settle(tester);
+    await tester.tap(find.text('1 possible duplicate'));
+    await settle(tester);
+    expect(find.text('Possible duplicates'), findsOneWidget);
+    await tester.tap(find.text('Delete the extra one'));
+    await settle(tester);
+    final left = await repo.list();
+    expect(left.map((t) => t.id), ['d1'], reason: 'keeps the first one recorded');
+    expect(find.text('No duplicates'), findsOneWidget);
+  });
 }

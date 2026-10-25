@@ -474,6 +474,83 @@ class TransactionRepository {
     return rows.map(Txn.fromMap).toList();
   }
 
+  // ---------------------------------------------------------------- duplicates
+
+  static const String _ignoredDuplicatesKey = 'ignored_duplicates';
+
+  /// Groups of payments that look like one payment recorded more than once:
+  /// same direction and amount within [window] of each other. Two payments
+  /// with different bank references, or to different UPI IDs, are never
+  /// grouped. Groups the user marked "Not duplicates" are left out.
+  /// Newest group first.
+  Future<List<List<Txn>>> duplicateGroups({Duration window = const Duration(minutes: 10)}) async {
+    final rows = await _db.query(
+      'transactions',
+      where: "$_notDeleted AND status != 'failed'",
+      orderBy: 'txn_time ASC',
+    );
+    final txns = rows.map(Txn.fromMap).toList();
+    final ignored = await _ignoredDuplicates();
+    final used = <String>{};
+    final groups = <List<Txn>>[];
+    for (var i = 0; i < txns.length; i++) {
+      final first = txns[i];
+      if (used.contains(first.id)) continue;
+      final group = [first];
+      for (var j = i + 1; j < txns.length; j++) {
+        final other = txns[j];
+        if (other.txnTime.difference(first.txnTime) > window) break;
+        if (!used.contains(other.id) && group.every((t) => _looksSame(t, other))) group.add(other);
+      }
+      if (group.length < 2 || ignored.contains(_signature(group))) continue;
+      used.addAll(group.map((t) => t.id));
+      groups.add(group);
+    }
+    return groups.reversed.toList();
+  }
+
+  static bool _looksSame(Txn a, Txn b) {
+    if (a.type != b.type || a.amountPaise != b.amountPaise) return false;
+    if (a.upiRef != null && b.upiRef != null && a.upiRef != b.upiRef) return false;
+    final va = a.payeeVpa?.trim().toLowerCase() ?? '';
+    final vb = b.payeeVpa?.trim().toLowerCase() ?? '';
+    return va.isEmpty || vb.isEmpty || va == vb;
+  }
+
+  static String _signature(List<Txn> group) => (group.map((t) => t.id).toList()..sort()).join('|');
+
+  Future<Set<String>> _ignoredDuplicates() async {
+    final rows = await _db.query('meta', where: 'key = ?', whereArgs: [_ignoredDuplicatesKey]);
+    if (rows.isEmpty) return {};
+    return (rows.first['value']! as String).split('\n').where((s) => s.isNotEmpty).toSet();
+  }
+
+  /// Remembers that this group is not a duplicate, so it is not shown again.
+  Future<void> ignoreDuplicates(List<Txn> group) async {
+    final ignored = await _ignoredDuplicates()
+      ..add(_signature(group));
+    await _db.insert(
+      'meta',
+      {'key': _ignoredDuplicatesKey, 'value': ignored.join('\n')},
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// The payment to keep from a duplicate group: one with a confirmed
+  /// category, then any category, then a bank reference, then the earliest.
+  static Txn keeperOf(List<Txn> group) {
+    int score(Txn t) =>
+        (t.categoryId != null && t.isReviewed ? 4 : 0) +
+        (t.categoryId != null ? 2 : 0) +
+        (t.upiRef != null ? 1 : 0);
+    final sorted = [...group]
+      ..sort((a, b) {
+        final byScore = score(b).compareTo(score(a));
+        return byScore != 0 ? byScore : a.txnTime.compareTo(b.txnTime);
+      });
+    return sorted.first;
+  }
+
   /// Spending per day of the month (index 0 = the 1st), counted the same way
   /// as the month total: successful debits, excluding transfers.
   Future<List<int>> dailySpend(DateTime anyDayInMonth) async {

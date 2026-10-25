@@ -111,7 +111,7 @@ class SettingsScreen extends ConsumerWidget {
                 icon: Icons.info_outline,
                 color: p.muted,
                 title: 'Dripless',
-                subtitle: '0.8.0',
+                subtitle: '0.9.0',
               ),
             ],
           ),

@@ -9,12 +9,21 @@ import '../transactions/txn.dart';
 import 'category.dart';
 
 class CategoryPickResult {
-  const CategoryPickResult({required this.categoryId, required this.remember});
+  const CategoryPickResult({required this.categoryId, required this.remember}) : delete = false;
+
+  /// The user chose "Delete this payment" instead of a category.
+  const CategoryPickResult.deleteRequest()
+      : categoryId = '',
+        remember = false,
+        delete = true;
 
   final String categoryId;
 
   /// User asked to always use this category for the same payee.
   final bool remember;
+
+  /// True when the payment should be deleted (only offered with allowDelete).
+  final bool delete;
 }
 
 /// Bottom sheet to pick a category. Expenses see expense + transfer
@@ -25,6 +34,7 @@ Future<CategoryPickResult?> showCategoryPicker(
   required TxnType type,
   String? selectedId,
   String? payeeLabel,
+  bool allowDelete = false,
 }) {
   final allowed = type == TxnType.debit
       ? {CategoryKind.expense, CategoryKind.transfer}
@@ -41,6 +51,7 @@ Future<CategoryPickResult?> showCategoryPicker(
       categories: visible,
       selectedId: selectedId,
       payeeLabel: payeeLabel,
+      allowDelete: allowDelete,
       newKind: type == TxnType.debit ? CategoryKind.expense : CategoryKind.income,
     ),
   );
@@ -52,6 +63,7 @@ class _CategoryPickerBody extends ConsumerStatefulWidget {
     required this.newKind,
     required this.selectedId,
     required this.payeeLabel,
+    this.allowDelete = false,
   });
 
   final List<TxnCategory> categories;
@@ -60,6 +72,9 @@ class _CategoryPickerBody extends ConsumerStatefulWidget {
   final CategoryKind newKind;
   final String? selectedId;
   final String? payeeLabel;
+
+  /// Shows "Delete this payment" under the grid (duplicates, not a payment).
+  final bool allowDelete;
 
   @override
   ConsumerState<_CategoryPickerBody> createState() => _CategoryPickerBodyState();
@@ -184,6 +199,18 @@ class _CategoryPickerBodyState extends ConsumerState<_CategoryPickerBody> {
                 },
               ),
             ),
+            if (widget.allowDelete)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(kGutter - 8, 0, kGutter - 8, 12),
+                child: TextButton.icon(
+                  onPressed: () => Navigator.pop(context, const CategoryPickResult.deleteRequest()),
+                  icon: Icon(Icons.delete_outline, color: Theme.of(context).colorScheme.error),
+                  label: Text(
+                    'Delete this payment (duplicate or not mine)',
+                    style: TextStyle(color: Theme.of(context).colorScheme.error),
+                  ),
+                ),
+              ),
           ],
         ),
       ),

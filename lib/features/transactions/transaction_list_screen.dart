@@ -9,6 +9,7 @@ import '../../core/theme/ui.dart';
 import '../../core/utils/formatters.dart';
 import 'add_transaction_screen.dart';
 import 'categorize_action.dart';
+import 'duplicates_screen.dart';
 import 'payment_mode_ui.dart';
 import 'transaction_tile.dart';
 import 'txn.dart';
@@ -48,6 +49,13 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Transactions'),
+        actions: [
+          IconButton(
+            tooltip: 'Find duplicates',
+            icon: const Icon(Icons.copy_all_outlined),
+            onPressed: () => openDuplicates(context),
+          ),
+        ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(118),
           child: Column(

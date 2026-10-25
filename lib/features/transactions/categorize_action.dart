@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
 import '../categories/category_picker_sheet.dart';
+import 'delete_action.dart';
 import 'txn.dart';
 
 /// Opens the category picker for one transaction and saves the choice.
@@ -16,8 +17,13 @@ Future<void> categorizeTransaction(BuildContext context, WidgetRef ref, Txn txn)
     type: txn.type,
     selectedId: txn.categoryId,
     payeeLabel: txn.payeeLabel,
+    allowDelete: true,
   );
-  if (result == null) return;
+  if (result == null || !context.mounted) return;
+  if (result.delete) {
+    await deleteTransactionsWithUndo(context, ref, [txn.id]);
+    return;
+  }
 
   await ref
       .read(txnRepoProvider)
