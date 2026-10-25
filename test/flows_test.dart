@@ -312,7 +312,7 @@ void main() {
     await settle(tester);
     await tester.tap(find.text('Payment needs a category'));
     await settle(tester);
-    await tester.tap(find.text('Chai Point'));
+    await tester.tap(find.text('Chai Point').last);
     await settle(tester);
     await tester.tap(find.text('Delete this payment (duplicate or not mine)'));
     await settle(tester);
